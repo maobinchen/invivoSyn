@@ -1,12 +1,12 @@
 
 <!-- README.md is generated from README.Rmd. Please edit that file -->
 
-# SynergyInVivo
+# invivoSyn
 
 <!-- badges: start -->
 <!-- badges: end -->
 
-The goal of SynergyInVivo is to evaluate synergy for in vivo tumor
+The goal of invivoSyn is to evaluate synergy for in vivo tumor
 growth data. Synergy can be calculated based on TGI/AUC based drug
 effect or linear mixed model. For effect based efficacy, three reference
 models can be selected, which are HSA (Highest Single Agent),
@@ -14,12 +14,12 @@ Bliss(Bliss Independence) or RA(Response Addivity).
 
 ## Installation
 
-You can install the development version of SynergyInVivo from
+You can install the development version of invivoSyn from
 [GitHub](https://github.com/) with:
 
 ``` r
 # install.packages("devtools")
-devtools::install_github("maobinchen/SynergyInVivo")
+devtools::install_github("maobinchen/invivoSyn")
 ```
 
 ## Example
@@ -27,8 +27,8 @@ devtools::install_github("maobinchen/SynergyInVivo")
 This is a basic example which shows you how to do synergy calculation
 
 ``` r
-library(SynergyInVivo)
-tv <- read_tv(system.file("extdata", "test.csv", package = "SynergyInVivo"))
+library(invivoSyn)
+tv <- read_tv(system.file("extdata", "test.csv", package = "invivoSyn"))
 TGI_lst <- getTGI(tv,17)
 bliss_synergy_TGI <- TGI_synergy(TGI_lst)
 ```
