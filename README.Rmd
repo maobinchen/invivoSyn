@@ -13,7 +13,7 @@ knitr::opts_chunk$set(
   message = F,
   warning = F,
   fig.height = 8,
-  fig.width = 12,
+  fig.width = 16,
   dpi = 72,
   cache = FALSE
 )
@@ -41,12 +41,12 @@ This is a basic example which shows you how to do synergy calculation
 
 ```{r example}
 library(invivoSyn)
-tv <- LS_1034
+tv <- read_tv(system.file("extdata", "test.csv", package = "invivoSyn"))
 TGI_lst <- getTGI(tv,17)
 bliss_synergy_TGI <- TGI_synergy(TGI_lst)
 TGI_lst_RTV <- getTGI(tv,17,tv_var='RTV') #TGI defition from CombPDX paper
 bliss_synergy_TGI_RTV <- TGI_synergy(TGI_lst_RTV)
-global_CI=global_CI_synergy(tv)
+#global_CI=global_CI_synergy(tv)
 AUC_lst <- get_mAUCr(SNU_81, ci = 0.9, ci_type = "bca")
 bliss_synergy_AUC <- AUC_synergy(AUC_lst)
 ```

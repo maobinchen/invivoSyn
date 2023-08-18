@@ -6,11 +6,11 @@
 <!-- badges: start -->
 <!-- badges: end -->
 
-The goal of invivoSyn is to evaluate synergy for in vivo tumor
-growth data. Synergy can be calculated based on TGI/AUC based drug
-effect or linear mixed model. For effect based efficacy, three reference
-models can be selected, which are HSA (Highest Single Agent),
-Bliss(Bliss Independence) or RA(Response Addivity).
+The goal of invivoSyn is to evaluate synergy for in vivo tumor growth
+data. Synergy can be calculated based on TGI/AUC based drug effect or
+linear mixed model. For effect based efficacy, three reference models
+can be selected, which are HSA (Highest Single Agent), Bliss(Bliss
+Independence) or RA(Response Addivity).
 
 ## Installation
 
@@ -36,8 +36,16 @@ bliss_synergy_TGI <- TGI_synergy(TGI_lst)
 <img src="man/figures/README-example-1.png" width="100%" />
 
 ``` r
+TGI_lst_RTV <- getTGI(tv,17,tv_var='RTV') #TGI defition from CombPDX paper
+bliss_synergy_TGI_RTV <- TGI_synergy(TGI_lst_RTV)
+```
+
+<img src="man/figures/README-example-2.png" width="100%" />
+
+``` r
+#global_CI=global_CI_synergy(tv)
 AUC_lst <- get_mAUCr(SNU_81, ci = 0.9, ci_type = "bca")
 bliss_synergy_AUC <- AUC_synergy(AUC_lst)
 ```
 
-<img src="man/figures/README-example-2.png" width="100%" />
+<img src="man/figures/README-example-3.png" width="100%" />
