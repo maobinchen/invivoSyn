@@ -6,6 +6,7 @@
 #' @param save save image
 #' @param method method for synergy calculation, can be Bliss,HSA or RA
 #' @param display whether or not display figure
+#' @param file if save is TRUE, the name of output file
 #'
 #' @return Result of synergy calculation
 #' @export
@@ -13,7 +14,7 @@
 #' @examples
 #' TGI_lst=getTGI(LS_1034,17)
 #' bliss_synergy_TGI=TGI_synergy(TGI_lst)
-TGI_synergy=function(TGI_lst,method='Bliss',ci=0.95,ci_type='perc',display=TRUE,save=TRUE){
+TGI_synergy=function(TGI_lst,method='Bliss',ci=0.95,ci_type='perc',display=TRUE,save=TRUE,file="TGI_synergy"){
   data=TGI_lst$bsTGI_r$data
   bsTGI_df=TGI_lst$bsTGI_df
   d1_TGI=bsTGI_df[1,'TGI']
@@ -45,7 +46,7 @@ TGI_synergy=function(TGI_lst,method='Bliss',ci=0.95,ci_type='perc',display=TRUE,
     theme_Publication()
   figure=ggpubr::ggarrange(p1,p2,labels=c("A","B"),ncol=2)
   if(display) print(figure)
-  if(save) ggsave(paste0("TGI synergy plot by ",method,'.png'),width=16,height=8,dpi=300)
+  if(save) ggsave(paste0(file,'.png'),width=16,height=8,dpi=300)
 
   bsTGI_r=TGI_lst$bsTGI_r
   bsTGI_r$t=bsTGI_all
@@ -98,6 +99,8 @@ bs_AUC_synergy=function(auc_mouse,t=21,method='Bliss',idx){
 #' @param save save image
 #' @param display print image
 #' @param boot_n number of bootstrap resample
+#' @param kw
+#' @param file if save is TRUE, the name of output file
 #'
 #' @return a dataframe of synergy scores and its bootstrap confidence interval
 #' @export
@@ -105,7 +108,7 @@ bs_AUC_synergy=function(auc_mouse,t=21,method='Bliss',idx){
 #' @examples
 #' auc_lst=get_mAUCr(LS_1034)
 #' bliss_synergy_AUC=AUC_synergy(auc_lst)
-AUC_synergy=function(auc_lst,t=21,method='Bliss',boot_n=1000,ci=0.95,ci_type='perc',display=TRUE,save=TRUE,kw='Test'){
+AUC_synergy=function(auc_lst,t=21,method='Bliss',boot_n=1000,ci=0.95,ci_type='perc',display=TRUE,save=TRUE,kw='Test',file="eGR_synergy"){
   auc_mouse=as.data.frame(auc_lst$auc_mouse)
   bsAUCci_r=boot::boot(data=auc_mouse,statistic=bs_AUC_synergy,t=t,method=method,strata=auc_mouse$Group,R=boot_n)
   #bsAUCci_r=readRDS('SW837_boot_paper.Rdata')
@@ -125,7 +128,7 @@ AUC_synergy=function(auc_lst,t=21,method='Bliss',boot_n=1000,ci=0.95,ci_type='pe
   p2=plot_density(bs_df,ss_names[2],0,pval_SS,pe=out_df[2,'Value'],lb = out_df[2,'lb'],ub = out_df[2,'ub'])
   figure=ggpubr::ggarrange(p1,p2,ncol=2)#labels=c("A","B"),
   if(display) print(figure)
-  if(save) ggsave(paste0(kw," AUC synergy plot by ",method,'.png'),width=17,height=8,dpi=300)
+  if(save) ggsave(paste0(file,'.png'),width=17,height=8,dpi=300)
   out_df=bind_cols(out_df,data.frame(p.val=c(pval_CI,pval_SS)))
   out_df
 }

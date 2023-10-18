@@ -13,7 +13,8 @@ AUC_synergy(
   ci_type = "perc",
   display = TRUE,
   save = TRUE,
-  kw = "Test"
+  kw = "Test",
+  file = "eGR_synergy"
 )
 }
 \arguments{
@@ -32,6 +33,8 @@ AUC_synergy(
 \item{display}{print image}
 
 \item{save}{save image}
+
+\item{file}{if save is TRUE, the name of output file}
 }
 \value{
 a dataframe of synergy scores and its bootstrap confidence interval

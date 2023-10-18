@@ -10,7 +10,8 @@ TGI_synergy(
   ci = 0.95,
   ci_type = "perc",
   display = TRUE,
-  save = TRUE
+  save = TRUE,
+  file = "TGI_synergy"
 )
 }
 \arguments{
@@ -25,6 +26,8 @@ TGI_synergy(
 \item{display}{whether or not display figure}
 
 \item{save}{save image}
+
+\item{file}{if save is TRUE, the name of output file}
 }
 \value{
 Result of synergy calculation
