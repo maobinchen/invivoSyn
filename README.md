@@ -18,7 +18,8 @@ You can install the development version of invivoSyn from
 [GitHub](https://github.com/) with:
 
 ``` r
-# install.packages("devtools")
+if (!require("devtools", quietly = TRUE))
+    install.packages("devtools")
 devtools::install_github("maobinchen/invivoSyn")
 ```
 
@@ -43,7 +44,6 @@ bliss_synergy_TGI_RTV <- TGI_synergy(TGI_lst_RTV)
 <img src="man/figures/README-example-2.png" width="100%" />
 
 ``` r
-#global_CI=global_CI_synergy(tv)
 AUC_lst <- get_mAUCr(SNU_81, ci = 0.9, ci_type = "bca")
 bliss_synergy_AUC <- AUC_synergy(AUC_lst)
 ```

@@ -9,7 +9,7 @@ bs_AUC_synergy(auc_mouse, t = 21, method = "Bliss", idx)
 \arguments{
 \item{auc_mouse}{auc dataframe for each mouse}
 
-\item{t}{date to estimate survival (default 14 days)}
+\item{t}{date to estimate survival (default 21 days)}
 
 \item{method}{method for synergy calculation, can be Bliss,HSA or RA}
 

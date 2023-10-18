@@ -59,7 +59,7 @@ TGI_synergy=function(TGI_lst,method='Bliss',ci=0.95,ci_type='perc',display=TRUE,
 #' AUC based synergy calculation for bootstrap
 #'
 #' @param auc_mouse auc dataframe for each mouse
-#' @param t date to estimate survival (default 14 days)
+#' @param t date to estimate survival (default 21 days)
 #' @param method method for synergy calculation, can be Bliss,HSA or RA
 #' @param idx bootstrap index
 #'
@@ -91,7 +91,7 @@ bs_AUC_synergy=function(auc_mouse,t=21,method='Bliss',idx){
 #' Calculatr AUC based synergy scores and its bootstrap confidence interval
 #'
 #' @param auc_lst results from AUC calculation
-#' @param t date to estimate survival (default 14 days)
+#' @param t date to estimate survival (default 21 days)
 #' @param method method for synergy calculation, can be Bliss,HSA or RA
 #' @param ci confidence intervaln for AUC based synergy score, can be 0.95,0.9,0.8, etc
 #' @param ci_type type of bootstrap confidence interval, can be stud,perc or bca

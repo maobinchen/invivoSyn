@@ -19,7 +19,7 @@ AUC_synergy(
 \arguments{
 \item{auc_lst}{results from AUC calculation}
 
-\item{t}{date to estimate survival (default 14 days)}
+\item{t}{date to estimate survival (default 21 days)}
 
 \item{method}{method for synergy calculation, can be Bliss,HSA or RA}
 
