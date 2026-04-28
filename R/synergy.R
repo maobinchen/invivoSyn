@@ -17,14 +17,18 @@
 TGI_synergy=function(TGI_lst,method='Bliss',ci=0.95,ci_type='perc',display=TRUE,save=TRUE,file="TGI_synergy"){
   data=TGI_lst$bsTGI_r$data
   bsTGI_df=TGI_lst$bsTGI_df
-  d1_TGI=bsTGI_df[1,'TGI']
-  d2_TGI=bsTGI_df[2,'TGI']
-  expected_TGI=switch(method,"Bliss"=100*(d1_TGI/100+d2_TGI/100-d1_TGI*d2_TGI/10000),
-                      "HSA"=max(d1_TGI,d2_TGI),
-                      "RA"=d1_TGI+d2_TGI)
+  single_tgi=bsTGI_df$TGI[-nrow(bsTGI_df)]
+  single_surv=1-single_tgi/100
+  combo_tgi=bsTGI_df$TGI[nrow(bsTGI_df)]
+  combo_surv=1-combo_tgi/100
+  #d1_TGI=bsTGI_df[1,'TGI']
+  #d2_TGI=bsTGI_df[2,'TGI']
+  expected_TGI=switch(method,"Bliss"=100*(1-prod(single_surv)),
+                      "HSA"=max(single_tgi),
+                      "RA"=sum(single_tgi))
   #synergy type,can either be Combination Index(CI:log(Observed effect/Expeced effect)) or synergy score (Observed effect-expected effect)
-  synergy_score=bsTGI_df[3,'TGI']-expected_TGI
-  CI=log(bsTGI_df[3,'TGI']/expected_TGI)
+  synergy_score=combo_tgi-expected_TGI
+  CI=log(combo_tgi/expected_TGI)
 
   p1=ggplot(bsTGI_df, aes(x=Treatment, y=TGI)) +
     geom_bar(stat="identity", position=position_dodge())+
@@ -36,13 +40,17 @@ TGI_synergy=function(TGI_lst,method='Bliss',ci=0.95,ci_type='perc',display=TRUE,
 
 
   bsTGI_all=TGI_lst$bsTGI_r$t
-  colnames(bsTGI_all)=c('D1','D2','Combo')
-  bsTGI_all = bsTGI_all %>% as.data.frame() %>% mutate('expected_TGI'=switch(method,"Bliss"=D1+D2-D1*D2,"HSA"=pmax(D1,D2),"RA"=D1+D2))
+  ngrps=ncol(bsTGI_all)-1
+  colnames(bsTGI_all)=c(paste0("Group",1:ngrps),'Combo')
+  bsTGI_all2 = bsTGI_all %>% as.data.frame() %>% select(-ncol(bsTGI_all)) %>% rowwise() %>%
+    mutate('expected_TGI'=switch(method,"Bliss"=1-prod(1-c_across(everything())),"HSA"=max(c_across(everything())),"RA"=sum(c_across(everything()))))
+  bsTGI_all=bsTGI_all %>% as.data.frame() %>% mutate(expected_TGI=bsTGI_all2$expected_TGI)
   bsTGI_all = bsTGI_all %>% mutate(Synergy_score=Combo-expected_TGI)
   bsTGI_all = bsTGI_all*100 #in percentage
-  pval=round(1-sum(bsTGI_all$Combo>bsTGI_all$expected_TGI)/nrow(bsTGI_all),4)
+  pval_syn=round(1-sum(bsTGI_all$Combo>bsTGI_all$expected_TGI)/nrow(bsTGI_all),4)
+  pval_anta=round(1-sum(bsTGI_all$Combo < bsTGI_all$expected_TGI)/nrow(bsTGI_all),4)
   p2=bsTGI_all %>% ggplot()+aes(expected_TGI,Combo)+geom_point()+xlab("Expected TGI")+ylab("Observed Combo TGI")+
-    geom_abline(slope = 1,color='red',linetype=2)+annotate('text',x=-Inf,y=Inf,hjust=0,vjust=1,label=paste0("Bootstrap Pvalue=",pval),size=7)+
+    geom_abline(slope = 1,color='red',linetype=2)+annotate('text',x=-Inf,y=Inf,hjust=0,vjust=1,label=paste0("Bootstrap Pvalue=",pval_syn),size=7)+
     theme_Publication()
   figure=ggpubr::ggarrange(p1,p2,labels=c("A","B"),ncol=2)
   if(display) print(figure)
@@ -51,8 +59,8 @@ TGI_synergy=function(TGI_lst,method='Bliss',ci=0.95,ci_type='perc',display=TRUE,
   bsTGI_r=TGI_lst$bsTGI_r
   bsTGI_r$t=bsTGI_all
   bsTGI_r$t0=c(TGI_lst$bsTGI_df$TGI,expected_TGI,synergy_score)
-  ss_ci=getCI(bsTGI_r,c(5,5),conf=ci,ci_type=ci_type)
-  c('Expected TGI'=expected_TGI,'Observed TGI'=bsTGI_df[3,'TGI'],'p.val'=pval,'CI'=CI,
+  ss_ci=getCI(bsTGI_r,c(length(bsTGI_r$t0),length(bsTGI_r$t0)),conf=ci,ci_type=ci_type)
+  c('Expected TGI'=expected_TGI,'Observed TGI'=bsTGI_df[3,'TGI'],'p.val.Synergy)'=pval_syn,'p.val.Antagonism'=pval_anta,'CI'=CI,
     "Synergy score"=synergy_score,'ss_lb'=ss_ci[1],'ss_ub'=ss_ci[2])
 }
 
@@ -84,8 +92,10 @@ bs_AUC_synergy=function(auc_mouse,t=21,method='Bliss',idx){
   auc_mean=auc_mouse %>% filter(!is.na(AUC)) %>% group_by(Group) %>% summarise(auc=mean(AUC))
   auc_mean=auc_mean %>% mutate(auc_v=auc_mean[['auc']][1]) %>% mutate(s=exp((auc-auc_v)*t))
   s_vec=auc_mean %>% pull(s)
-  s_e=switch(method,"Bliss"=s_vec[2]*s_vec[3],"HSA"=min(s_vec[2],s_vec[3]),"RA"=s_vec[2]+s_vec[3]-1)
-  c(CI=s_vec[4]/s_e,Synergy_score=100*(s_e-s_vec[4]))
+  s_single=s_vec[2:(length(s_vec)-1)]
+  s_e=switch(method,"Bliss"=prod(s_single),"HSA"=min(s_single),"RA"=sum(1-s_single))
+  ngrps=length(s_vec)
+  c(CI=s_vec[ngrps]/s_e,Synergy_score=100*(s_e-s_vec[ngrps]))
 }
 
 
@@ -101,16 +111,22 @@ bs_AUC_synergy=function(auc_mouse,t=21,method='Bliss',idx){
 #' @param boot_n number of bootstrap resample
 #' @param kw
 #' @param file if save is TRUE, the name of output file
+#' @param parallel whether or not usint parallel computing
 #'
 #' @return a dataframe of synergy scores and its bootstrap confidence interval
+#' @import parallel
 #' @export
 #'
 #' @examples
 #' auc_lst=get_mAUCr(LS_1034)
 #' bliss_synergy_AUC=AUC_synergy(auc_lst)
-AUC_synergy=function(auc_lst,t=21,method='Bliss',boot_n=1000,ci=0.95,ci_type='perc',display=TRUE,save=TRUE,kw='Test',file="eGR_synergy"){
+AUC_synergy=function(auc_lst,t=21,method='Bliss',boot_n=1000,ci=0.95,
+                     ci_type='perc',kw='Test',file="eGR_synergy",save=T,display=F,
+                     parallel='no'){
   auc_mouse=as.data.frame(auc_lst$auc_mouse)
-  bsAUCci_r=boot::boot(data=auc_mouse,statistic=bs_AUC_synergy,t=t,method=method,strata=auc_mouse$Group,R=boot_n)
+  set.seed(123456)
+  bsAUCci_r=boot::boot(data=auc_mouse,statistic=bs_AUC_synergy,t=t,method=method,strata=auc_mouse$Group,
+                       R=boot_n,parallel = parallel,ncpus = parallel::detectCores()-1)
   #bsAUCci_r=readRDS('SW837_boot_paper.Rdata')
   n=length(bsAUCci_r$t0)
   cis=do.call(rbind,lapply(1:n,function(i) getCI(bsAUCci_r,i,conf=ci,ci_type=ci_type)))
@@ -122,14 +138,22 @@ AUC_synergy=function(auc_lst,t=21,method='Bliss',boot_n=1000,ci=0.95,ci_type='pe
   #define name of synergy scores
   ss_names=paste0(method,c(" CI"," Synergy Score"),'(invivoSyn)')
   colnames(bs_df)=ss_names
-  pval_CI=mean(bs_df[[ss_names[1]]]>=1,na.rm=T)
-  pval_SS=mean(bs_df[[ss_names[2]]]<=0,na.rm=T)
-  p1=plot_density(bs_df,ss_names[1],1,pval_CI,pe=out_df[1,'Value'],lb = out_df[1,'lb'],ub = out_df[1,'ub'])
-  p2=plot_density(bs_df,ss_names[2],0,pval_SS,pe=out_df[2,'Value'],lb = out_df[2,'lb'],ub = out_df[2,'ub'])
-  figure=ggpubr::ggarrange(p1,p2,ncol=2)#labels=c("A","B"),
+  pval_CI_syn=mean(bs_df[[ss_names[1]]]>1,na.rm=T)
+  pval_SS_syn=mean(bs_df[[ss_names[2]]]<0,na.rm=T)
+  pval_CI_anta=mean(bs_df[[ss_names[1]]]<1,na.rm=T)
+  pval_SS_anta=mean(bs_df[[ss_names[2]]]>0,na.rm=T)
+  p1=plot_density(bs_df,ss_names[1],1,pval_CI_syn,pe=out_df[1,'Value'],lb = out_df[1,'lb'],ub = out_df[1,'ub'])
+  p2=plot_density(bs_df,ss_names[2],0,pval_SS_syn,pe=out_df[2,'Value'],lb = out_df[2,'lb'],ub = out_df[2,'ub'])
+  figure=ggpubr::ggarrange(p1,p2,ncol=2)#labels=c("A","B")
   if(display) print(figure)
-  if(save) ggsave(paste0(file,'.png'),width=17,height=8,dpi=300)
-  out_df=bind_cols(out_df,data.frame(p.val=c(pval_CI,pval_SS)))
+  if(save){
+    png(paste0(file,'.png'),width = 17,height = 8,units = 'in',res=300)
+    print(figure)
+    dev.off()
+  }
+  #if(save) ggsave(paste0(file,'.png'),width=17,height=8,dpi=300)
+  out_df=bind_cols(out_df,data.frame('p.val.Synergy'=c(pval_CI_syn,pval_SS_syn),
+                                     'p.val.Antagonism'=c(pval_CI_anta,pval_SS_anta)))
   out_df
 }
 
