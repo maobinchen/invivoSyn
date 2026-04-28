@@ -11,10 +11,11 @@ AUC_synergy(
   boot_n = 1000,
   ci = 0.95,
   ci_type = "perc",
-  display = TRUE,
-  save = TRUE,
   kw = "Test",
-  file = "eGR_synergy"
+  file = "eGR_synergy",
+  save = T,
+  display = F,
+  parallel = "no"
 )
 }
 \arguments{
@@ -30,11 +31,13 @@ AUC_synergy(
 
 \item{ci_type}{type of bootstrap confidence interval, can be stud,perc or bca}
 
-\item{display}{print image}
+\item{file}{if save is TRUE, the name of output file}
 
 \item{save}{save image}
 
-\item{file}{if save is TRUE, the name of output file}
+\item{display}{print image}
+
+\item{parallel}{whether or not usint parallel computing}
 }
 \value{
 a dataframe of synergy scores and its bootstrap confidence interval

@@ -92,7 +92,7 @@ hsa_synergy_TGI
 ### AUC based synergy
 AUC based synergy is based on area under curve(AUC) of each mouse, first we will estimate tumor growth rate(k) of each mouse by its normalized AUC^1^, which can be used to calculate tumor volume at time t using formula TV~t~=TV~0~exp(kt). We will calcuate probability of survival associated with drug effect by conditional probability Pr(T|C)=S~T~/S~C~, with S~T~ defined as survival of treatment group and S~C~ defined as survival of control group, a.k.a. vehicle group^2^. TV~t~ is equalvalent with S~T~ here. We will compare observed survival and expected survival of combination group, using Bliss, HSA or RA as the reference model. For Bliss model, S~AB~=S~A~S~B~; for HSA model, S~AB~=min(S~A~,S~B~); and for RA model,S~AB~=S~A~+S~B~-1. Combination index is defined as the ratio of observed and expected S~AB~, whicle synergy score is defined as the difference between observed and expected S~AB~ in percentage. P-value and confidence interval are calculated using stratified bootstrap method, three options are available: percentile interval, bootstrap t-interval and bias corrected BCa interval. 
 ```{r,fig.width=16}
-bliss_synergy_AUC <- AUC_synergy(AUC_lst)
+bliss_synergy_AUC <- AUC_synergy(AUC_lst,parallel = 'snow')
 bliss_synergy_AUC %>% kable(digits=3)
 hsa_synergy_AUC <- AUC_synergy(AUC_lst, t = 21, method = "HSA", ci_type = "bca", ci = 0.9, save = T)
 hsa_synergy_AUC %>% kable(digits=3)
