@@ -25,6 +25,7 @@ knitr::opts_chunk$set(
 <!-- badges: end -->
 
 The goal of invivoSyn is to evaluate synergy for in vivo tumor growth data. Synergy can be calculated based on TGI/AUC based drug effect or linear mixed model. For effect based efficacy, three reference models can be selected, which are HSA (Highest Single Agent), Bliss(Bliss Independence) or RA(Response Addivity).
+P-values are calculated for both synergistic effect and antagonism effect.
 
 ## Installation
 
