@@ -1,5 +1,8 @@
 #' Synergy calculation based on TGI (TGI can either be defined by 1-delta(t)/delta(c) or 1-RTV(t)/RTV(c))
 #'
+#' Generalized to N-drug combinations: handles any number of single-agent
+#' arms via the `roles` list carried in `TGI_lst$roles`.
+#'
 #' @param TGI_lst An list object returned by getTGI function
 #' @param ci confidence intervaln for TGI based synergy score, can be 0.95,0.9,0.8, etc
 #' @param ci_type type of bootstrap confidence interval, can be stud,perc or bca
@@ -15,18 +18,18 @@
 #' TGI_lst=getTGI(LS_1034,17)
 #' bliss_synergy_TGI=TGI_synergy(TGI_lst)
 TGI_synergy=function(TGI_lst,method='Bliss',ci=0.95,ci_type='perc',display=TRUE,save=TRUE,file="TGI_synergy"){
-  data=TGI_lst$bsTGI_r$data
   bsTGI_df=TGI_lst$bsTGI_df
-  single_tgi=bsTGI_df$TGI[-nrow(bsTGI_df)]
+  roles=TGI_lst$roles
+  if(is.null(roles)) stop("TGI_lst missing `roles`; re-run getTGI() on a tv produced by read_tv().")
+  combo_row=which(bsTGI_df$Group==roles$combo_grp)
+  if(length(combo_row)!=1L) stop("Combo group not found in bsTGI_df.")
+  single_rows=which(bsTGI_df$Group %in% roles$single_grps)
+  single_tgi=bsTGI_df$TGI[single_rows]
   single_surv=1-single_tgi/100
-  combo_tgi=bsTGI_df$TGI[nrow(bsTGI_df)]
-  combo_surv=1-combo_tgi/100
-  #d1_TGI=bsTGI_df[1,'TGI']
-  #d2_TGI=bsTGI_df[2,'TGI']
+  combo_tgi=bsTGI_df$TGI[combo_row]
   expected_TGI=switch(method,"Bliss"=100*(1-prod(single_surv)),
                       "HSA"=max(single_tgi),
                       "RA"=sum(single_tgi))
-  #synergy type,can either be Combination Index(CI:log(Observed effect/Expeced effect)) or synergy score (Observed effect-expected effect)
   synergy_score=combo_tgi-expected_TGI
   CI=log(combo_tgi/expected_TGI)
 
@@ -38,17 +41,20 @@ TGI_synergy=function(TGI_lst,method='Bliss',ci=0.95,ci_type='perc',display=TRUE,
     geom_text(aes(x=-Inf,y=expected_TGI+2),label=paste0('Expeted inhibition by ',method),vjust=0,hjust=0,size=rel(1.2))+
     theme_Publication()
 
-
   bsTGI_all=TGI_lst$bsTGI_r$t
-  ngrps=ncol(bsTGI_all)-1
-  colnames(bsTGI_all)=c(paste0("Group",1:ngrps),'Combo')
-  bsTGI_all2 = bsTGI_all %>% as.data.frame() %>% select(-ncol(bsTGI_all)) %>% rowwise() %>%
-    mutate('expected_TGI'=switch(method,"Bliss"=1-prod(1-c_across(everything())),"HSA"=max(c_across(everything())),"RA"=sum(c_across(everything()))))
-  bsTGI_all=bsTGI_all %>% as.data.frame() %>% mutate(expected_TGI=bsTGI_all2$expected_TGI)
-  bsTGI_all = bsTGI_all %>% mutate(Synergy_score=Combo-expected_TGI)
-  bsTGI_all = bsTGI_all*100 #in percentage
+  bs_cols=c(as.character(roles$single_grps),'Combo')
+  colnames(bsTGI_all)=bs_cols
+  bsTGI_all=as.data.frame(bsTGI_all)
+  single_mat=as.matrix(bsTGI_all[,seq_along(roles$single_grps),drop=FALSE])
+  expected_TGI_bs=switch(method,
+                         "Bliss"=1-apply(1-single_mat,1,prod),
+                         "HSA"=apply(single_mat,1,max),
+                         "RA"=rowSums(single_mat))
+  bsTGI_all$expected_TGI=expected_TGI_bs
+  bsTGI_all$Synergy_score=bsTGI_all$Combo-bsTGI_all$expected_TGI
+  bsTGI_all=bsTGI_all*100
   pval_syn=round(1-sum(bsTGI_all$Combo>bsTGI_all$expected_TGI)/nrow(bsTGI_all),4)
-  pval_anta=round(1-sum(bsTGI_all$Combo < bsTGI_all$expected_TGI)/nrow(bsTGI_all),4)
+  pval_anta=round(1-sum(bsTGI_all$Combo<bsTGI_all$expected_TGI)/nrow(bsTGI_all),4)
   p2=bsTGI_all %>% ggplot()+aes(expected_TGI,Combo)+geom_point()+xlab("Expected TGI")+ylab("Observed Combo TGI")+
     geom_abline(slope = 1,color='red',linetype=2)+annotate('text',x=-Inf,y=Inf,hjust=0,vjust=1,label=paste0("Bootstrap Pvalue=",pval_syn),size=7)+
     theme_Publication()
@@ -57,10 +63,10 @@ TGI_synergy=function(TGI_lst,method='Bliss',ci=0.95,ci_type='perc',display=TRUE,
   if(save) ggsave(paste0(file,'.png'),width=16,height=8,dpi=300)
 
   bsTGI_r=TGI_lst$bsTGI_r
-  bsTGI_r$t=bsTGI_all
+  bsTGI_r$t=as.matrix(bsTGI_all)
   bsTGI_r$t0=c(TGI_lst$bsTGI_df$TGI,expected_TGI,synergy_score)
   ss_ci=getCI(bsTGI_r,c(length(bsTGI_r$t0),length(bsTGI_r$t0)),conf=ci,ci_type=ci_type)
-  c('Expected TGI'=expected_TGI,'Observed TGI'=bsTGI_df[3,'TGI'],'p.val.Synergy)'=pval_syn,'p.val.Antagonism'=pval_anta,'CI'=CI,
+  c('Expected TGI'=expected_TGI,'Observed TGI'=combo_tgi,'p.val.Synergy)'=pval_syn,'p.val.Antagonism'=pval_anta,'CI'=CI,
     "Synergy score"=synergy_score,'ss_lb'=ss_ci[1],'ss_ub'=ss_ci[2])
 }
 
@@ -71,31 +77,23 @@ TGI_synergy=function(TGI_lst,method='Bliss',ci=0.95,ci_type='perc',display=TRUE,
 #' @param t date to estimate survival (default 21 days)
 #' @param method method for synergy calculation, can be Bliss,HSA or RA
 #' @param idx bootstrap index
+#' @param roles roles list (output of [get_roles()])
 #'
 #' @return combination index (CI) and synergy score
-bs_AUC_synergy=function(auc_mouse,t=21,method='Bliss',idx){
-  #here normalized auc is the estimate of tumor growth rate(k),survival is calculated using exp(k*t)
+bs_AUC_synergy=function(auc_mouse,t=21,method='Bliss',roles=NULL,idx){
   auc_mouse=auc_mouse[idx,]
-  #auc_v=auc_mouse %>% filter(Group=="Group 1") %>% pull(AUC)
-  #auc_a=auc_mouse %>% filter(Group=="Group 2") %>% pull(AUC)
-  #auc_b=auc_mouse %>% filter(Group=="Group 3") %>% pull(AUC)
-  #auc_c=auc_mouse %>% filter(Group=="Group 4") %>% pull(AUC)
-  #aucs=expand.grid('AUC_v'=auc_v,'AUC_a'=auc_a,'AUC_b'=auc_b,'AUC_c'=auc_c)
-  #aucs=aucs[complete.cases(aucs),]
-  #aucs=aucs %>% mutate(s_a=exp((AUC_a-AUC_v)*t),s_b=exp((AUC_b-AUC_v)*t),s_c=exp((AUC_c-AUC_v)*t))
-  #not making sense for AUC based synergy, considering expected RA survivalcan be less than 0
-  #aucs = aucs %>% mutate('s_e'=switch(method,"Bliss"=s_a*s_b,"HSA"=pmin(s_a,s_b),"RA"=s_a+s_b-1))
-  #aucs = aucs %>% mutate(CI=s_c/s_e,Synergy_score=100*(s_e-s_c))
-  #c(median_CI=median(aucs$CI,na.rm = T),median_ss=median(aucs$Synergy_score,na.rm=T))
-  #c(median_CI=median(aucs$CI,na.rm = T),median_ss=median(aucs$Synergy_score,na.rm=T))
-  #auc_mean=auc_mouse %>% filter(!is.na(AUC)) %>% group_by(Group) %>% summarise(auc=mean(AUC))
-  auc_mean=auc_mouse %>% filter(!is.na(AUC)) %>% group_by(Group) %>% summarise(auc=mean(AUC))
-  auc_mean=auc_mean %>% mutate(auc_v=auc_mean[['auc']][1]) %>% mutate(s=exp((auc-auc_v)*t))
-  s_vec=auc_mean %>% pull(s)
-  s_single=s_vec[2:(length(s_vec)-1)]
+  if(is.null(roles)){
+    grps=levels(droplevels(auc_mouse$Group))
+    roles=list(vehicle_grp=grps[1],
+               single_grps=grps[2:(length(grps)-1)],
+               combo_grp=grps[length(grps)])
+  }
+  auc_mean=auc_mouse %>% filter(!is.na(AUC)) %>% group_by(Group) %>% summarise(auc=mean(AUC),.groups='drop')
+  auc_v=auc_mean$auc[auc_mean$Group==roles$vehicle_grp]
+  s_single=exp((auc_mean$auc[match(roles$single_grps,auc_mean$Group)]-auc_v)*t)
+  s_combo=exp((auc_mean$auc[auc_mean$Group==roles$combo_grp]-auc_v)*t)
   s_e=switch(method,"Bliss"=prod(s_single),"HSA"=min(s_single),"RA"=sum(1-s_single))
-  ngrps=length(s_vec)
-  c(CI=s_vec[ngrps]/s_e,Synergy_score=100*(s_e-s_vec[ngrps]))
+  c(CI=s_combo/s_e,Synergy_score=100*(s_e-s_combo))
 }
 
 
@@ -109,7 +107,7 @@ bs_AUC_synergy=function(auc_mouse,t=21,method='Bliss',idx){
 #' @param save save image
 #' @param display print image
 #' @param boot_n number of bootstrap resample
-#' @param kw
+#' @param kw legend keyword for plotting
 #' @param file if save is TRUE, the name of output file
 #' @param parallel whether or not usint parallel computing
 #'
@@ -124,18 +122,17 @@ AUC_synergy=function(auc_lst,t=21,method='Bliss',boot_n=1000,ci=0.95,
                      ci_type='perc',kw='Test',file="eGR_synergy",save=T,display=F,
                      parallel='no'){
   auc_mouse=as.data.frame(auc_lst$auc_mouse)
+  roles=auc_lst$roles
+  if(is.null(roles)) stop("auc_lst missing `roles`; re-run get_mAUCr() on a tv produced by read_tv().")
   set.seed(123456)
-  bsAUCci_r=boot::boot(data=auc_mouse,statistic=bs_AUC_synergy,t=t,method=method,strata=auc_mouse$Group,
+  bsAUCci_r=boot::boot(data=auc_mouse,statistic=bs_AUC_synergy,t=t,method=method,roles=roles,strata=auc_mouse$Group,
                        R=boot_n,parallel = parallel,ncpus = parallel::detectCores()-1)
-  #bsAUCci_r=readRDS('SW837_boot_paper.Rdata')
   n=length(bsAUCci_r$t0)
   cis=do.call(rbind,lapply(1:n,function(i) getCI(bsAUCci_r,i,conf=ci,ci_type=ci_type)))
   out_df=cbind(broom::tidy(bsAUCci_r),cis)
   out_df=out_df[,-3]
   names(out_df)=c('Metric','Value','std.err','lb','ub')
   bs_df=bsAUCci_r$t %>% as.data.frame()
-  #colnames(bs_df)=c("mAUC-CI","mAUC-Synergy Score")
-  #define name of synergy scores
   ss_names=paste0(method,c(" CI"," Synergy Score"),'(invivoSyn)')
   colnames(bs_df)=ss_names
   pval_CI_syn=mean(bs_df[[ss_names[1]]]>1,na.rm=T)
@@ -144,14 +141,13 @@ AUC_synergy=function(auc_lst,t=21,method='Bliss',boot_n=1000,ci=0.95,
   pval_SS_anta=mean(bs_df[[ss_names[2]]]>0,na.rm=T)
   p1=plot_density(bs_df,ss_names[1],1,pval_CI_syn,pe=out_df[1,'Value'],lb = out_df[1,'lb'],ub = out_df[1,'ub'])
   p2=plot_density(bs_df,ss_names[2],0,pval_SS_syn,pe=out_df[2,'Value'],lb = out_df[2,'lb'],ub = out_df[2,'ub'])
-  figure=ggpubr::ggarrange(p1,p2,ncol=2)#labels=c("A","B")
+  figure=ggpubr::ggarrange(p1,p2,ncol=2)
   if(display) print(figure)
   if(save){
     png(paste0(file,'.png'),width = 17,height = 8,units = 'in',res=300)
     print(figure)
     dev.off()
   }
-  #if(save) ggsave(paste0(file,'.png'),width=17,height=8,dpi=300)
   out_df=bind_cols(out_df,data.frame('p.val.Synergy'=c(pval_CI_syn,pval_SS_syn),
                                      'p.val.Antagonism'=c(pval_CI_anta,pval_SS_anta)))
   out_df
@@ -159,6 +155,12 @@ AUC_synergy=function(auc_lst,t=21,method='Bliss',boot_n=1000,ci=0.95,
 
 
 #' Calculate synergy based on linear mixed model
+#'
+#' Generalized to N-drug combinations. Builds indicator variables for each
+#' single-agent treatment in `roles$singles` and fits
+#' `logTV ~ log(TV0) + Day + Day:(d1*d2*...*dN)` so that the N-way
+#' interaction term tests for synergy. For N>3 the number of interaction
+#' terms grows as 2^N, so a warning is emitted.
 #'
 #' @param tv tumor growth data
 #' @param sel_day the last day selected for tumor growth data, if not defined, use all data
@@ -169,19 +171,31 @@ AUC_synergy=function(auc_lst,t=21,method='Bliss',boot_n=1000,ci=0.95,
 #' @examples
 #' lmm_synergy(LS_1034)
 lmm_synergy=function(tv,sel_day=NA){
+  roles=get_roles(tv)
   if(!is.na(sel_day)) tv=tv %>% filter(Day <= sel_day)
-  tv=tv %>% mutate(Treatment=make.names(Treatment))
-  group_info=tv %>% select(Group,Treatment) %>% distinct()
-  trts=as.character(group_info$Treatment[2:3])
-  for(tr in trts) tv[[tr]]=ifelse(grepl(tr,tv$Treatment),1,0)
-  lmm_f=paste0("logTV~log(TV0)+Day+Day:(",trts[1],'*',trts[2],')')
+  participating=c(roles$vehicle_grp,roles$single_grps,roles$combo_grp)
+  tv=tv %>% filter(Group %in% participating)
+  tv=tv %>% mutate(Treatment=make.names(as.character(Treatment)))
+  singles_nm=make.names(roles$singles)
+  combo_nm=make.names(roles$combo)
+  if(length(singles_nm)>3L)
+    warning("lmm_synergy: ", length(singles_nm), " single agents requested; the full ",
+            length(singles_nm), "-way interaction has ", 2^length(singles_nm)-1,
+            " terms and may not be identifiable.", call.=FALSE)
+  for(tr in singles_nm){
+    tv[[tr]]=as.integer(tv$Treatment == tr | tv$Treatment == combo_nm)
+  }
+  first_order=paste0("Day:",singles_nm,collapse='+')
+  highest=paste0("Day:",paste(singles_nm,collapse=':'))
+  lmm_f=paste0("logTV~log(TV0)+Day+",first_order,"+",highest)
   lmm1<-nlme::lme(as.formula(lmm_f), random=list(Mouse=~Day-1), method='REML', data=tv)
-  lmm_results=broom.mixed::tidy(lmm1)
-  lmm_results=lmm_results %>% filter(effect=='fixed') %>% select(3:8)
-  lmm_results
+  broom.mixed::tidy(lmm1) %>% filter(effect=='fixed') %>% select(3:8)
 }
 
 #' Calculate Day-specifc CI based on CombPDX's method
+#'
+#' Generalized to N-drug combinations via the closed-form Bliss/HSA/RA
+#' formulas in RTV space. Variance is computed via the delta method.
 #'
 #' @param tv tumor growth data
 #' @param sel_day the specific day for CI calcuation
@@ -193,48 +207,67 @@ lmm_synergy=function(tv,sel_day=NA){
 #'
 #' @examples
 CombPDX_CI=function(tv,sel_day=NA,method='Bliss',ci=0.95){
+  roles=get_roles(tv)
   if(!is.na(sel_day)) tv=tv %>% filter(Day == sel_day)
-  RTV=tv %>% group_by(Group) %>% summarise(mean_RTV=mean(RTV),n=n(),variance=var(RTV))
-  RTV_vec=RTV %>% pull(mean_RTV)
-  group_idx=ifelse(RTV_vec[2]<RTV_vec[3],2,3) #deterimine which group have better efficacy
-  n_vec=RTV %>% pull(n)
-  var_vec=RTV %>% pull(variance)
-  CI=switch(method,"Bliss"=log(RTV_vec[2])+log(RTV_vec[3])-log(RTV_vec[1])-log(RTV_vec[4]),
-            "HSA"=log(RTV_vec[group_idx])-log(RTV_vec[4]),
-            "RA"=log(RTV_vec[2]+RTV_vec[3])-log(RTV_vec[1]+RTV_vec[4]))
-  var_CI=switch(method,"Bliss"=var_vec[1]/(n_vec[1]*(RTV_vec[1]^2))+var_vec[2]/(n_vec[2]*(RTV_vec[2]^2))+
-                  var_vec[3]/(n_vec[3]*(RTV_vec[3]^2))+var_vec[4]/(n_vec[4]*(RTV_vec[4]^2)),
-            "HSA"=var_vec[group_idx]/(n_vec[group_idx]*(RTV_vec[group_idx]^2))+var_vec[4]/(n_vec[4]*(RTV_vec[4]^2)),
-            "RA"=var_vec[2]/(n_vec[2]*((RTV_vec[2]+RTV_vec[3])^2))+var_vec[3]/(n_vec[3]*((RTV_vec[2]+RTV_vec[3])^2))+
-              var_vec[1]/(n_vec[1]*((RTV_vec[1]+RTV_vec[4])^2))+var_vec[4]/(n_vec[4]*((RTV_vec[1]+RTV_vec[4])^2)))
+  RTV=tv %>% group_by(Group) %>% summarise(mean_RTV=mean(RTV),n=n(),variance=var(RTV),.groups='drop')
+  pick=function(g) which(RTV$Group==g)
+  i_v=pick(roles$vehicle_grp); i_c=pick(roles$combo_grp)
+  i_s=vapply(roles$single_grps,pick,integer(1L))
+  N=length(i_s)
+  rtv_v=RTV$mean_RTV[i_v]; rtv_c=RTV$mean_RTV[i_c]; rtv_s=RTV$mean_RTV[i_s]
+  var_v=RTV$variance[i_v]; var_c=RTV$variance[i_c]; var_s=RTV$variance[i_s]
+  n_v=RTV$n[i_v];           n_c=RTV$n[i_c];           n_s=RTV$n[i_s]
+  if(method=='Bliss'){
+    CI=sum(log(rtv_s))-(N-1)*log(rtv_v)-log(rtv_c)
+    var_CI=sum(var_s/(n_s*rtv_s^2))+(N-1)^2*var_v/(n_v*rtv_v^2)+var_c/(n_c*rtv_c^2)
+  } else if(method=='HSA'){
+    j=which.min(rtv_s)
+    CI=log(rtv_s[j])-log(rtv_c)
+    var_CI=var_s[j]/(n_s[j]*rtv_s[j]^2)+var_c/(n_c*rtv_c^2)
+  } else if(method=='RA'){
+    sum_s=sum(rtv_s); denom=(N-1)*rtv_v+rtv_c
+    CI=log(sum_s)-log(denom)
+    var_CI=sum(var_s/(n_s*sum_s^2))+(N-1)^2*var_v/(n_v*denom^2)+var_c/(n_c*denom^2)
+  } else stop("Unknown method: ",method)
   q1=qnorm(ci)
-  c('CI'=CI,'std.err'=sqrt(var_CI),'lb'=CI-q1*sqrt(var_CI),'ub'=CI+q1*sqrt(var_CI),'p.val'=1-pnorm(CI,sd=sqrt(var_CI)))#p.val'=2*(1-pnorm(abs(CI),sd=sqrt(var_CI))))
+  c('CI'=CI,'std.err'=sqrt(var_CI),'lb'=CI-q1*sqrt(var_CI),'ub'=CI+q1*sqrt(var_CI),
+    'p.val'=1-pnorm(CI,sd=sqrt(var_CI)))
 }
 
 
 #' Bootstrap function to Calculate global CI based on TGI definition
 #'
-#' @param tv_wide tumor growth data in wide format (can be eiter deltaTV or RTV (mouse,Treatment,Group,Day...)), for bootstrap mouse within group
+#' @param tv_wide tumor growth data in wide format (mouse, Treatment, Group, day columns); bootstrap mouse within group
 #' @param method method for synergy calculation, can be Bliss,HSA or RA
+#' @param roles roles list (output of [get_roles()])
 #' @param idx bootstrap index
 #'
-#' @return a dataframe of synergy scores and its bootstrap confidence interval
+#' @return mean CI across days (a scalar)
 #' @export
-#'
-#' @examples
-bs_global_CI=function(tv_wide,method='Bliss',idx){
+bs_global_CI=function(tv_wide,method='Bliss',roles=NULL,idx){
   tv_wide=tv_wide[idx,]
-  #if(!is.na(sel_day)) tv=tv %>% filter(Day <= sel_day)
+  if(is.null(roles)){
+    grps=levels(droplevels(tv_wide$Group))
+    roles=list(vehicle_grp=grps[1],
+               single_grps=grps[2:(length(grps)-1)],
+               combo_grp=grps[length(grps)])
+  }
   rtv_long=tv_wide %>% pivot_longer(c(-1,-2,-3),names_to='Day',values_to = 'RTV')
   rtv_long=rtv_long[complete.cases(rtv_long),]
-  mean_rtv=suppressMessages(rtv_long %>% group_by(Day,Group) %>% summarise(mean_RTV=mean(RTV)) %>%
+  mean_rtv=suppressMessages(rtv_long %>% group_by(Day,Group) %>% summarise(mean_RTV=mean(RTV),.groups='drop') %>%
     pivot_wider(id_cols = Day,names_from = Group,values_from = mean_RTV) %>% mutate(Day=as.numeric(Day)) %>%
     arrange(Day) %>% na.omit() %>% filter(Day>0))
-  #When a lot of RTV equals to 0, could be problematic
-  CI=switch(method,"Bliss"=mean_rtv %>% mutate(CI=log(`Group 2`)+log(`Group 3`)-log(`Group 1`)-log(`Group 4`)) %>% pull(CI) %>% mean,
-            "HSA"=mean_rtv %>% mutate(lowm=min(`Group 2`,`Group 3`)) %>% mutate(CI=log(lowm)-log(`Group 4`)) %>% pull(CI) %>% mean,
-            "RA"=mean_rtv %>% mutate(CI=log(`Group 2`+`Group 3`)-log(`Group 1`+`Group 4`)) %>% pull(CI) %>% mean)
-  CI
+  N=length(roles$single_grps)
+  v=mean_rtv[[roles$vehicle_grp]]; cc=mean_rtv[[roles$combo_grp]]
+  s_mat=as.matrix(mean_rtv[,as.character(roles$single_grps),drop=FALSE])
+  if(method=='Bliss'){
+    ci_per_day=rowSums(log(s_mat))-(N-1)*log(v)-log(cc)
+  } else if(method=='HSA'){
+    ci_per_day=log(apply(s_mat,1,min))-log(cc)
+  } else if(method=='RA'){
+    ci_per_day=log(rowSums(s_mat))-log((N-1)*v+cc)
+  } else stop("Unknown method: ",method)
+  mean(ci_per_day)
 }
 
 #' Calculatr global CI from CombPDX and its bootstrap confidence interval
@@ -252,8 +285,12 @@ bs_global_CI=function(tv_wide,method='Bliss',idx){
 #'
 #' @examples
 global_CI_synergy=function(tv,method='Bliss',boot_n=1000,ci=0.95,ci_type='perc',display=TRUE,save=TRUE){
+  roles=get_roles(tv)
+  participating=c(roles$vehicle_grp,roles$single_grps,roles$combo_grp)
+  tv=tv %>% filter(Group %in% participating) %>% mutate(Group=droplevels(Group))
   RTV_wide=tv %>% pivot_wider(1:3,names_from = Day,values_from = RTV)
-  bsAUCci_r=boot::boot(data=RTV_wide,statistic=bs_global_CI,method=method,strata=RTV_wide$Group,R=boot_n)
+  bsAUCci_r=boot::boot(data=RTV_wide,statistic=bs_global_CI,method=method,roles=roles,
+                       strata=RTV_wide$Group,R=boot_n)
   n=length(bsAUCci_r$t0)
   cis=do.call(rbind,lapply(1:n,function(i) getCI(bsAUCci_r,i,conf=ci,ci_type=ci_type)))
   out_df=cbind(broom::tidy(bsAUCci_r),cis)
@@ -267,5 +304,3 @@ global_CI_synergy=function(tv,method='Bliss',boot_n=1000,ci=0.95,ci_type='perc',
   out_df=bind_cols(out_df,data.frame(p.val=pval_CI))
   out_df
 }
-
-

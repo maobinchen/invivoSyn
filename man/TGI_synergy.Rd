@@ -33,7 +33,8 @@ TGI_synergy(
 Result of synergy calculation
 }
 \description{
-Synergy calculation based on TGI (TGI can either be defined by 1-delta(t)/delta(c) or 1-RTV(t)/RTV(c))
+Generalized to N-drug combinations: handles any number of single-agent
+arms via the \code{roles} list carried in \code{TGI_lst$roles}.
 }
 \examples{
 TGI_lst=getTGI(LS_1034,17)

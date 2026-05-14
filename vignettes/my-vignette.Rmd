@@ -36,7 +36,35 @@ This vignette demonstrates how to use invivoSyn package, which is designed to ev
 
 ## Load tumor growth data
 
-Tumor growth data should be based on four arms design: Vehicle, Drug A, Drug B, Drug A+Drug B. The input file should have Treatment, Mouse and days in numeric number, and treatment should be in the order of vehicle,Drug A, Drug B, Drug A+Drug B. Please see below for an example of 4x2 design
+Tumor growth data is laid out in **wide format**: one row per mouse, columns
+`Treatment`, `Mouse`, and one numeric column per measurement day.
+
+The canonical layout is a four-arm design — Vehicle, Drug A, Drug B,
+Drug A+Drug B — and `read_tv()` will infer this if rows appear in that
+positional order. For any non-canonical layout (different row order, extra
+non-participating arms, or N-drug combinations where N > 2), pass the
+roles explicitly:
+
+```r
+tv <- read_tv("my_study.csv",
+              vehicle = "Vehicle",
+              singles = c("Drug A", "Drug B"),
+              combo   = "Drug A+Drug B")
+
+# Three-drug combination:
+tv <- read_tv("triple_study.csv",
+              vehicle = "PBS",
+              singles = c("A", "B", "C"),
+              combo   = "A+B+C")
+```
+
+`read_tv()` validates the input, ignores any non-participating treatments,
+and attaches a `roles` attribute that downstream functions
+(`getTGI`, `TGI_synergy`, `AUC_synergy`, `lmm_synergy`, `CombPDX_CI`,
+`global_CI_synergy`) consume automatically — no need to repeat the role
+mapping at each call.
+
+Please see below for an example of 4x2 design
 
 | Treatment     | Mouse | 0   | 4   | 7   | ... |
 |---------------|-------|-----|-----|-----|-----|

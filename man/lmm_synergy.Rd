@@ -15,7 +15,11 @@ lmm_synergy(tv, sel_day = NA)
 a data frame, linear mixed model results
 }
 \description{
-Calculate synergy based on linear mixed model
+Generalized to N-drug combinations. Builds indicator variables for each
+single-agent treatment in \code{roles$singles} and fits
+\code{logTV ~ log(TV0) + Day + Day:(d1*d2*...*dN)} so that the N-way
+interaction term tests for synergy. For N>3 the number of interaction
+terms grows as 2^N, so a warning is emitted.
 }
 \examples{
 lmm_synergy(LS_1034)

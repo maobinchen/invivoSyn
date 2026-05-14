@@ -31,6 +31,8 @@ AUC_synergy(
 
 \item{ci_type}{type of bootstrap confidence interval, can be stud,perc or bca}
 
+\item{kw}{legend keyword for plotting}
+
 \item{file}{if save is TRUE, the name of output file}
 
 \item{save}{save image}

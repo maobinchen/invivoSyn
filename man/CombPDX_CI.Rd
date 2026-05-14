@@ -19,5 +19,6 @@ CombPDX_CI(tv, sel_day = NA, method = "Bliss", ci = 0.95)
 a vector of CI and it's confidence interval
 }
 \description{
-Calculate Day-specifc CI based on CombPDX's method
+Generalized to N-drug combinations via the closed-form Bliss/HSA/RA
+formulas in RTV space. Variance is computed via the delta method.
 }

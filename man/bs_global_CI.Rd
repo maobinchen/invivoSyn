@@ -4,17 +4,19 @@
 \alias{bs_global_CI}
 \title{Bootstrap function to Calculate global CI based on TGI definition}
 \usage{
-bs_global_CI(tv_wide, method = "Bliss", idx)
+bs_global_CI(tv_wide, method = "Bliss", roles = NULL, idx)
 }
 \arguments{
-\item{tv_wide}{tumor growth data in wide format (can be eiter deltaTV or RTV (mouse,Treatment,Group,Day...)), for bootstrap mouse within group}
+\item{tv_wide}{tumor growth data in wide format (mouse, Treatment, Group, day columns); bootstrap mouse within group}
 
 \item{method}{method for synergy calculation, can be Bliss,HSA or RA}
+
+\item{roles}{roles list (output of \code{\link[=get_roles]{get_roles()}})}
 
 \item{idx}{bootstrap index}
 }
 \value{
-a dataframe of synergy scores and its bootstrap confidence interval
+mean CI across days (a scalar)
 }
 \description{
 Bootstrap function to Calculate global CI based on TGI definition

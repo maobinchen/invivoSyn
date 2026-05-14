@@ -8,3 +8,5 @@
 *.png
 *.csv
 !inst/extdata/*.csv
+/doc/
+/Meta/
