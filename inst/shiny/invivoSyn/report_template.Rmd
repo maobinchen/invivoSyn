@@ -1,0 +1,44 @@
+---
+title: "invivoSyn Combination Synergy Report"
+output:
+  html_document:
+    self_contained: true
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
+```
+
+**Source file:** `r source_filename`
+
+**Generated:** `r format(Sys.time(), "%Y-%m-%d %H:%M:%S")`
+
+## Analysis Settings
+
+```{r}
+knitr::kable(as.data.frame(snapshot$settings))
+```
+
+## Arm Roles
+
+```{r}
+knitr::kable(snapshot$role_map)
+```
+
+## Combination Comparator Mapping
+
+```{r}
+knitr::kable(snapshot$comparator_map)
+```
+
+## Ranked Combination Summary
+
+```{r}
+knitr::kable(snapshot$result$summary, digits = 4)
+```
+
+## Tumor Growth
+
+```{r, fig.width=11, fig.height=7}
+print(growth_plot(snapshot$tv, "TV"))
+```
