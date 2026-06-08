@@ -1,0 +1,34 @@
+test_that("report template renders from an immutable snapshot", {
+  skip_if_not(rmarkdown::pandoc_available())
+  app_dir <- system.file("shiny", "invivoSyn", package = "invivoSyn")
+  source(file.path(app_dir, "R", "helpers.R"), local = TRUE)
+  snapshot <- list(
+    settings = list(metric = "TGI", method = "Bliss", selected_day = 7),
+    role_map = tibble::tibble(
+      arm_id = c("Vehicle", "A", "B", "A.B"),
+      Treatment = c("Vehicle", "A", "B", "A+B"),
+      role = c("Vehicle", "Single agent", "Single agent", "Combination")
+    ),
+    comparator_map = tibble::tibble(
+      combination_arm_id = "A.B",
+      comparator_arm_id = c("A", "B")
+    ),
+    result = list(summary = tibble::tibble(
+      combination_arm_id = "A.B", metric = "TGI", method = "Bliss",
+      synergy_score = 10
+    )),
+    tv = tibble::tibble(
+      arm_id = rep(c("Vehicle", "A.B"), each = 2),
+      Treatment = rep(c("Vehicle", "A+B"), each = 2),
+      Mouse = rep("1", 4), Day = rep(c(0, 7), 2), TV = c(100, 200, 100, 120)
+    )
+  )
+  source_filename <- "synthetic.csv"
+  output <- tempfile(fileext = ".html")
+  rendered <- rmarkdown::render(
+    file.path(app_dir, "report_template.Rmd"),
+    output_file = basename(output), output_dir = dirname(output),
+    envir = environment(), quiet = TRUE
+  )
+  expect_true(file.exists(rendered))
+})

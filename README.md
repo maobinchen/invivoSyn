@@ -14,6 +14,21 @@ output: github_document
 The goal of invivoSyn is to evaluate synergy for in vivo tumor growth data. Synergy can be calculated based on TGI/AUC based drug effect or linear mixed model. For effect based efficacy, three reference models can be selected, which are HSA (Highest Single Agent), Bliss(Bliss Independence) or RA(Response Addivity).
 P-values are calculated for both synergistic effect and antagonism effect.
 
+## Shiny application
+
+The bundled Shiny application accepts wide or long tumor-volume files, supports
+multiple Combination arms with exact comparator mapping, and runs independent
+Bliss or HSA TGI/AUC analyses for each Combination.
+
+``` r
+invivoSyn::run_invivoSyn_app()
+```
+
+For local development, load the package checkout first with
+`devtools::load_all()`. For shinyapps.io deployment, install `invivoSyn` from a
+reproducible remote source and verify dependencies with
+`rsconnect::appDependencies("inst/shiny/invivoSyn")`.
+
 ## Installation
 
 You can install the development version of invivoSyn from [GitHub](https://github.com/) with:
