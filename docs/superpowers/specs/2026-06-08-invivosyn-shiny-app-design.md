@@ -2,14 +2,16 @@
 
 ## Purpose
 
-Create a guided Shiny application for one in vivo combination experiment at a
-time. The app lets users upload tumor-volume data, confirm experimental-arm
-roles, review data quality, calculate TGI- and AUC-based synergy, and download a
-complete report.
+Create a guided Shiny application for one in vivo experiment at a time. The app
+lets users upload tumor-volume data, confirm experimental-arm roles and exact
+comparators for each Combination arm, review data quality, calculate TGI- and
+AUC-based synergy, and download a complete report.
 
-The first release supports one vehicle arm, at least two single-agent arms, and
-one combination arm. It deliberately excludes LMM and CombPDX analyses so the
-same analysis contract applies to two-drug and higher-order combinations.
+The first release supports one Vehicle arm, a shared pool of Single-agent arms,
+and one or more Combination arms. Combination arms may represent different
+component sets, doses, or schedules. It deliberately excludes LMM and CombPDX
+analyses so the same analysis contract applies to two-drug and higher-order
+combinations.
 
 ## Location and Launching
 
@@ -51,7 +53,8 @@ inst/shiny/invivoSyn/
 - `app.R`: navbar, theme selection, module wiring, and session-level state.
 - `mod_upload.R`: file upload, sheet selection, format detection, column
   mapping, parsing, and raw preview.
-- `mod_groups.R`: role auto-detection and required user confirmation.
+- `mod_groups.R`: role auto-detection, required user confirmation, and exact
+  Single-agent comparator mapping for each Combination.
 - `mod_review.R`: validation results, exclusions, summaries, and growth curves.
 - `mod_analysis.R`: explicit-run TGI and AUC synergy calculations and results.
 - `mod_report.R`: self-contained HTML report and individual artifact downloads.
@@ -78,9 +81,13 @@ correct the mapping. It proposes experimental roles from treatment names:
 
 - Vehicle
 - Two or more single agents
-- One Combination
+- One or more Combinations
 
-Role detection is advisory. The user must confirm the mapping before continuing.
+Role and component detection is advisory. For every Combination, the app
+auto-suggests likely components from treatment names, then requires the user to
+map and confirm its exact Single-agent comparator arms. This exact mapping also
+handles dose- and schedule-matched comparator selection. Comparator arms may be
+reused across Combinations when explicitly mapped.
 
 ### Review
 
@@ -91,7 +98,7 @@ The app displays:
 - Counts for groups, mice, days, and excluded observations
 - Interactive tumor-growth curves with selectable `TV`, `RTV`, `DeltaTV`, or
   `logTV`
-- The confirmed role mapping
+- The confirmed role and Combination-to-comparator mappings
 
 ### Analyze
 
@@ -108,9 +115,10 @@ The analysis sidebar contains:
 - Explicit **Run Analysis** button
 
 Clicking **Run Analysis** creates an immutable snapshot of normalized data, role
-mapping, exclusions, and settings. Later input changes do not silently
-recalculate results; they mark existing results as stale until the user runs
-the analysis again.
+and comparator mappings, exclusions, and settings. Each Combination is analyzed
+independently using only the Vehicle, its mapped Single-agent comparators, and
+that Combination. Later input changes do not silently recalculate results; they
+mark existing results as stale until the user runs the analysis again.
 
 ### Report
 
@@ -128,31 +136,43 @@ Both input formats will be converted to a long tibble containing:
 Group, Treatment, Mouse, Day, TV, TV0, RTV, DeltaTV, logTV
 ```
 
-Internal `Group` values will be assigned from confirmed roles, independent of
-the uploaded treatment order:
+The normalized dataset will preserve stable internal arm identifiers and the
+original treatment labels. A separate confirmed mapping table will contain:
 
-- `Group 1`: Vehicle
-- `Group 2` through `Group n-1`: Single agents
-- `Group n`: Combination
+```text
+arm_id, Treatment, role
+```
 
-The app should preserve the original treatment labels for display and reports.
+where `role` is `Vehicle`, `Single agent`, or `Combination`. A second mapping
+table will contain one row per exact comparator relationship:
+
+```text
+combination_arm_id, comparator_arm_id
+```
+
+Calculations must derive temporary per-Combination analysis subsets and must not
+depend on uploaded treatment order or globally fixed `Group` numbers.
 
 ## Validation Rules
 
 Analysis is blocked unless all of these conditions hold:
 
 - Exactly one Vehicle arm is assigned.
-- Exactly one Combination arm is assigned.
+- At least one Combination arm is assigned.
 - At least two Single-agent arms are assigned.
 - Every uploaded treatment is assigned exactly one role.
+- Every Combination is mapped to at least two distinct Single-agent comparator
+  arms.
+- Every mapped comparator exists and has the Single-agent role.
+- Every Combination-to-comparator mapping is confirmed by the user.
 - Treatment-Mouse-Day observations are unique.
 - Study days and tumor volumes are numeric.
 - Tumor volumes are nonnegative.
 - Every mouse has a nonmissing baseline observation.
-- The selected TGI day contains Vehicle, Combination, and every Single-agent
-  arm.
-- Every analysis arm contains enough nonmissing observations for the requested
-  bootstrap calculation.
+- For each Combination, the selected TGI day contains the Vehicle, that
+  Combination, and all its mapped Single-agent comparator arms.
+- Every arm in each per-Combination analysis subset contains enough nonmissing
+  observations for the requested bootstrap calculation.
 
 Nonblocking warnings include:
 
@@ -162,14 +182,18 @@ Nonblocking warnings include:
 - Zero baseline tumor volume, which makes RTV unavailable
 - Very small bootstrap replicate counts
 - Role assignments that differ from auto-detection
+- Comparator mappings that differ from auto-detection
+- Explicit reuse of a Single-agent comparator across multiple Combinations
 
 Errors and warnings must identify the affected groups, mice, days, or columns
 and suggest a corrective action.
 
 ## Multi-Drug Synergy Calculations
 
-The app supports any number of single-agent arms for TGI and AUC calculations.
-The Combination arm is always the last internal group.
+The app supports one or more Combination arms. Each Combination is analyzed
+independently against exactly its confirmed Single-agent comparator arms and
+the shared Vehicle. Each per-Combination analysis supports any number of mapped
+Single-agent comparators.
 
 ### TGI
 
@@ -200,9 +224,9 @@ The implementation must isolate the expected-effect calculation in a tested
 helper so model behavior is explicit and can be corrected without changing
 Shiny modules.
 
-All calculations and result extraction must use the confirmed arm roles. They
-must not rely on fixed row numbers, uploaded treatment order, or an assumption
-that the combination is the third nonvehicle result.
+All calculations and result extraction must use the confirmed arm roles and
+Combination-to-comparator mappings. They must not rely on fixed row numbers,
+uploaded treatment order, or an assumption about a Combination's position.
 
 ### Excluded Methods
 
@@ -217,13 +241,23 @@ supports only Bliss and HSA reference models.
 
 The analysis page displays:
 
+- A cross-Combination summary table ranked separately within each metric and
+  reference model
 - Summary cards for observed effect, expected effect, synergy score,
-  confidence interval, and synergy and antagonism p-values
+  confidence interval, and synergy and antagonism p-values for the selected
+  Combination
 - Tumor-growth curves
-- TGI or AUC result tables
-- Expected-versus-observed plot
-- Bootstrap-distribution plots
+- Per-Combination TGI or AUC result tables
+- Per-Combination expected-versus-observed plots
+- Per-Combination bootstrap-distribution plots
 - A plain-language result label
+
+The user can select a Combination to inspect its detailed results. The app
+ranks Combinations only within the same metric and reference model. It must not
+create a single ranking that mixes TGI with AUC or Bliss with HSA. Within each
+metric and reference-model pair, Combinations are ranked by synergy score from
+highest to lowest. The summary displays confidence intervals and p-values beside
+the rank so ranking is not presented as statistical certainty.
 
 Interpretation labels use the synergy-score confidence interval:
 
@@ -240,12 +274,14 @@ The self-contained HTML report includes:
 
 - Source filename, generation time, and app/package version
 - Uploaded format and confirmed column mapping
-- Confirmed experimental-arm roles
+- Confirmed experimental-arm roles and every Combination-to-comparator mapping
 - Data-quality errors, warnings, and exclusions
 - Analysis settings and snapshot metadata
 - Tumor-growth plots
-- TGI or AUC tables and plots
-- Point estimates, confidence intervals, p-values, and interpretation
+- Cross-Combination summary tables
+- Per-Combination TGI or AUC tables and plots
+- Per-Combination point estimates, confidence intervals, p-values, and
+  interpretation
 - A methods note describing the selected reference model
 
 The report must be reproducible from the analysis snapshot and must not use
@@ -288,17 +324,24 @@ Helper and analysis tests cover:
 - Long-format parsing
 - Column auto-detection and mapping overrides
 - Role detection and confirmation
+- Combination component suggestion and exact comparator confirmation
 - Every blocking validation rule
 - Warning generation
 - Two-, three-, and higher-order single-agent TGI calculations
 - Two-, three-, and higher-order single-agent AUC calculations
+- Multiple Combination arms with different component sets
+- Multiple Combination arms with dose- or schedule-specific comparators
+- Explicit comparator reuse across Combinations
+- Per-Combination analysis isolation
+- Cross-Combination ranking within metric and reference model
 - Bliss and HSA expected-effect helpers
 - Stale-result detection
 - Report snapshot integrity
 
 Shiny tests use `shiny::testServer()` for module contracts and reactive state.
-A manual end-to-end check uses package sample data and at least one synthetic
-three-drug combination dataset.
+A manual end-to-end check uses package sample data and a synthetic experiment
+containing multiple Combinations, including different component sets and
+dose- or schedule-specific comparator mappings.
 
 The final verification sequence is:
 
@@ -312,7 +355,6 @@ The final verification sequence is:
 
 ## Out of Scope
 
-- Multiple Combination arms in one uploaded experiment
 - LMM and CombPDX analyses
 - Simulation and power analysis
 - Persistent user accounts or stored projects
