@@ -14,8 +14,18 @@ test_that("report template renders from an immutable snapshot", {
       comparator_arm_id = c("A", "B")
     ),
     result = list(summary = tibble::tibble(
-      combination_arm_id = "A.B", metric = "TGI", method = "Bliss",
-      synergy_score = 10
+      combination_arm_id = "A.B",
+      combination_treatment = "A+B",
+      metric = "TGI",
+      method = "Bliss",
+      observed = 60,
+      expected = 50,
+      synergy_score = 10,
+      lb = 2,
+      ub = 18,
+      p_value_synergy = 0.01,
+      p_value_antagonism = 0.99,
+      interpretation = "Synergistic"
     )),
     tv = tibble::tibble(
       arm_id = rep(c("Vehicle", "A.B"), each = 2),

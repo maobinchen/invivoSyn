@@ -32,7 +32,14 @@ report_server <- function(id, snapshot, stale, filename) {
     shiny::observe({
       snap <- snapshot()
       if (!is.null(snap)) {
-        shiny::updateSelectInput(session, "combo", choices = snap$result$summary$combination_arm_id)
+        shiny::updateSelectInput(
+          session,
+          "combo",
+          choices = stats::setNames(
+            snap$result$summary$combination_treatment,
+            snap$result$summary$combination_treatment
+          )
+        )
       }
     })
     output$growth_png <- shiny::downloadHandler(
@@ -43,7 +50,7 @@ report_server <- function(id, snapshot, stale, filename) {
       }
     )
     output$bootstrap_png <- shiny::downloadHandler(
-      filename = function() paste0("invivoSyn_", input$combo, "_bootstrap.png"),
+      filename = function() paste0("invivoSyn_", make.names(input$combo), "_bootstrap.png"),
       content = function(file) {
         snap <- require_fresh()
         ggplot2::ggsave(

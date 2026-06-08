@@ -14,6 +14,13 @@ validate_invivosyn_experiment <- function(
     warnings[[length(warnings) + 1L]] <<- validation_issue("warning", message)
     return(invisible(NULL))
   }
+  label_arm <- function(arm_id) {
+    value <- role_map$Treatment[match(arm_id, role_map$arm_id)]
+    if (length(value) == 0 || is.na(value[[1]])) {
+      return(as.character(arm_id))
+    }
+    return(as.character(value[[1]]))
+  }
 
   if (sum(role_map$role == "Vehicle") != 1L) add_error("Assign exactly one Vehicle arm.")
   if (sum(role_map$role == "Combination") < 1L) add_error("Assign at least one Combination arm.")
@@ -25,7 +32,11 @@ validate_invivosyn_experiment <- function(
     dplyr::count(.data$combination_arm_id, name = "n")
   incomplete <- setdiff(combos, map_counts$combination_arm_id[map_counts$n >= 2L])
   if (length(incomplete) > 0) {
-    add_error(paste0("Map at least two distinct comparators for: ", paste(incomplete, collapse = ", "), "."))
+    add_error(paste0(
+      "Map at least two distinct comparators for: ",
+      paste(vapply(incomplete, label_arm, character(1)), collapse = ", "),
+      "."
+    ))
   }
 
   dup <- tv |>
@@ -55,7 +66,12 @@ validate_invivosyn_experiment <- function(
         dplyr::count(.data$arm_id)
       missing <- setdiff(needed, counts$arm_id[counts$n >= min_observations])
       if (length(missing) > 0) {
-        add_error(paste0("Day ", selected_day, " lacks enough observations for ", combo, ": ", paste(missing, collapse = ", "), "."))
+        add_error(paste0(
+          "Day ", selected_day, " lacks enough observations for ",
+          label_arm(combo), ": ",
+          paste(vapply(missing, label_arm, character(1)), collapse = ", "),
+          "."
+        ))
       }
     }
   }

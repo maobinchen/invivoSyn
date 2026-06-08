@@ -1,136 +1,132 @@
-expected_tgi <- function(single_tgi, method = c("Bliss", "HSA")) {
+package_tgi_bootstrap <- function(tgi_lst, method = c("Bliss", "HSA")) {
   method <- match.arg(method)
-  value <- switch(
+  roles <- tgi_lst$roles
+  boot_matrix <- as.data.frame(tgi_lst$bsTGI_r$t)
+  colnames(boot_matrix) <- c(as.character(roles$single_grps), "Combo")
+  single_matrix <- as.matrix(boot_matrix[, seq_along(roles$single_grps), drop = FALSE])
+  expected <- switch(
     method,
-    Bliss = 100 * (1 - prod(1 - single_tgi / 100)),
-    HSA = max(single_tgi)
+    Bliss = 100 * (1 - apply(1 - single_matrix / 100, 1, prod)),
+    HSA = apply(single_matrix, 1, max)
   )
-  return(value)
-}
-
-expected_auc_effect <- function(single_effects, method = c("Bliss", "HSA")) {
-  method <- match.arg(method)
-  value <- switch(method, Bliss = prod(single_effects), HSA = min(single_effects))
-  return(value)
-}
-
-bootstrap_summary <- function(scores, point_estimate, conf = 0.95) {
-  alpha <- (1 - conf) / 2
+  observed <- 100 * boot_matrix$Combo
   return(tibble::tibble(
-    synergy_score = point_estimate,
-    lb = stats::quantile(scores, alpha, na.rm = TRUE, names = FALSE),
-    ub = stats::quantile(scores, 1 - alpha, na.rm = TRUE, names = FALSE),
-    p_value_synergy = mean(scores <= 0, na.rm = TRUE),
-    p_value_antagonism = mean(scores >= 0, na.rm = TRUE),
-    interpretation = dplyr::case_when(
-      stats::quantile(scores, alpha, na.rm = TRUE, names = FALSE) > 0 ~ "Synergistic",
-      stats::quantile(scores, 1 - alpha, na.rm = TRUE, names = FALSE) < 0 ~ "Antagonistic",
-      TRUE ~ "Inconclusive"
-    )
+    iteration = seq_len(nrow(boot_matrix)),
+    observed = observed,
+    expected = expected,
+    score = observed - expected
   ))
 }
 
-resample_by_arm <- function(data) {
-  return(data |>
-    split(data$arm_id) |>
-    purrr::map_dfr(~ dplyr::slice_sample(.x, prop = 1, replace = TRUE)))
-}
-
-analyze_tgi_combination <- function(
-    tv, vehicle_arm, comparator_arms, combination_arm, selected_day,
-    tv_var = c("DeltaTV", "RTV"), method = c("Bliss", "HSA"),
-    boot_n = 1000L, conf = 0.95, seed = 123456L) {
-  tv_var <- match.arg(tv_var)
-  method <- match.arg(method)
-  arms <- c(vehicle_arm, comparator_arms, combination_arm)
-  day_data <- tv |>
-    dplyr::filter(.data$Day == selected_day, .data$arm_id %in% arms, !is.na(.data[[tv_var]]))
-
-  score_once <- function(x) {
-    means <- x |>
-      dplyr::summarise(value = mean(.data[[tv_var]]), .by = arm_id)
-    vehicle <- means$value[match(vehicle_arm, means$arm_id)]
-    tgi <- 100 * (1 - means$value / vehicle)
-    names(tgi) <- means$arm_id
-    expected <- expected_tgi(tgi[comparator_arms], method)
-    observed <- tgi[[combination_arm]]
-    return(c(observed = observed, expected = expected, score = observed - expected))
-  }
-  point <- score_once(day_data)
-  set.seed(seed)
-  boot <- purrr::map_dfr(seq_len(boot_n), function(iteration) {
-    values <- score_once(resample_by_arm(day_data))
-    return(tibble::tibble(iteration = iteration, score = values[["score"]]))
-  })
-  summary <- bootstrap_summary(boot$score, point[["score"]], conf) |>
-    dplyr::mutate(
-      combination_arm_id = combination_arm,
-      metric = "TGI",
-      method = method,
-      observed = point[["observed"]],
-      expected = point[["expected"]],
-      .before = 1
-    )
-  return(list(summary = summary, bootstrap = boot))
-}
-
-mouse_auc <- function(data, end_day) {
-  values <- data |>
-    dplyr::filter(.data$Day <= end_day) |>
-    dplyr::arrange(.data$Day)
-  if (nrow(values) < 2L) return(NA_real_)
-  span <- max(values$Day) - min(values$Day)
-  if (span <= 0) return(NA_real_)
-  log_tv <- log(values$TV + 1)
-  auc <- pracma::trapz(values$Day, log_tv) -
-    pracma::trapz(values$Day, rep(log_tv[[1]], length(log_tv)))
-  return(2 * auc / (span^2))
-}
-
-analyze_auc_combination <- function(
-    tv, vehicle_arm, comparator_arms, combination_arm, end_day,
-    method = c("Bliss", "HSA"), boot_n = 1000L, conf = 0.95,
+package_auc_bootstrap <- function(
+    auc_lst, end_day, method = c("Bliss", "HSA"), boot_n = 1000L,
     seed = 123456L) {
   method <- match.arg(method)
-  arms <- c(vehicle_arm, comparator_arms, combination_arm)
-  filtered <- dplyr::filter(tv, .data$arm_id %in% arms)
-  auc_data <- filtered |>
-    split(interaction(filtered$arm_id, filtered$Mouse, drop = TRUE)) |>
-    purrr::map_dfr(function(mouse_data) {
-      return(tibble::tibble(
-        arm_id = mouse_data$arm_id[[1]],
-        Mouse = mouse_data$Mouse[[1]],
-        AUC = mouse_auc(mouse_data, end_day)
-      ))
-    }) |>
-    dplyr::filter(!is.na(.data$AUC))
-
-  score_once <- function(x) {
-    means <- x |>
-      dplyr::summarise(value = mean(.data$AUC), .by = arm_id)
-    vehicle <- means$value[match(vehicle_arm, means$arm_id)]
-    effects <- exp((means$value - vehicle) * end_day)
-    names(effects) <- means$arm_id
-    expected <- expected_auc_effect(effects[comparator_arms], method)
-    observed <- effects[[combination_arm]]
-    return(c(observed = observed, expected = expected, score = 100 * (expected - observed)))
-  }
-  point <- score_once(auc_data)
+  roles <- auc_lst$roles
+  auc_mouse <- as.data.frame(auc_lst$auc_mouse)
   set.seed(seed)
-  boot <- purrr::map_dfr(seq_len(boot_n), function(iteration) {
-    values <- score_once(resample_by_arm(auc_data))
-    return(tibble::tibble(iteration = iteration, score = values[["score"]]))
-  })
-  summary <- bootstrap_summary(boot$score, point[["score"]], conf) |>
-    dplyr::mutate(
-      combination_arm_id = combination_arm,
-      metric = "AUC",
+  boot_idx <- replicate(
+    boot_n,
+    sample.int(nrow(auc_mouse), size = nrow(auc_mouse), replace = TRUE),
+    simplify = FALSE
+  )
+  boot_scores <- purrr::map_dfr(seq_along(boot_idx), function(iteration) {
+    values <- getFromNamespace("bs_AUC_synergy", "invivoSyn")(
+      auc_mouse = auc_mouse,
+      t = end_day,
       method = method,
-      observed = point[["observed"]],
-      expected = point[["expected"]],
-      .before = 1
+      roles = roles,
+      idx = boot_idx[[iteration]]
     )
-  return(list(summary = summary, bootstrap = boot))
+    ci_value <- unname(values[["CI"]])
+    synergy_score <- unname(values[["Synergy_score"]])
+    if (isTRUE(all.equal(ci_value, 1))) {
+      expected <- NA_real_
+      observed <- NA_real_
+    } else {
+      expected <- (synergy_score / 100) / (1 - ci_value)
+      observed <- ci_value * expected
+    }
+    return(tibble::tibble(
+      iteration = iteration,
+      observed = observed,
+      expected = expected,
+      score = synergy_score
+    ))
+  })
+  return(boot_scores)
+}
+
+interpret_score <- function(lb, ub) {
+  if (is.na(lb) || is.na(ub)) {
+    return(NA_character_)
+  }
+  if (lb > 0) {
+    return("Synergistic")
+  }
+  if (ub < 0) {
+    return("Antagonistic")
+  }
+  return("Inconclusive")
+}
+
+summarize_tgi_result <- function(combo_arm_id, combo_treatment, method, tgi_syn, boot_scores) {
+  p_syn_name <- grep("^p\\.val\\.Synergy", names(tgi_syn), value = TRUE)[1]
+  summary <- tibble::tibble(
+    combination_arm_id = combo_arm_id,
+    combination_treatment = combo_treatment,
+    metric = "TGI",
+    method = method,
+    observed = unname(tgi_syn[["Observed TGI"]]),
+    expected = unname(tgi_syn[["Expected TGI"]]),
+    synergy_score = unname(tgi_syn[["Synergy score"]]),
+    lb = unname(tgi_syn[["ss_lb"]]),
+    ub = unname(tgi_syn[["ss_ub"]]),
+    ci_value = unname(tgi_syn[["CI"]]),
+    p_value_synergy = unname(tgi_syn[[p_syn_name]]),
+    p_value_antagonism = unname(tgi_syn[["p.val.Antagonism"]])
+  ) |>
+    dplyr::mutate(
+      interpretation = interpret_score(.data$lb, .data$ub)
+    )
+  bootstrap <- dplyr::mutate(
+    boot_scores,
+    combination_arm_id = combo_arm_id,
+    combination_treatment = combo_treatment,
+    metric = "TGI",
+    .before = 1
+  )
+  return(list(summary = summary, bootstrap = bootstrap))
+}
+
+summarize_auc_result <- function(combo_arm_id, combo_treatment, method, auc_syn, boot_scores) {
+  synergy_row <- auc_syn[auc_syn$Metric == "Synergy_score", , drop = FALSE]
+  ci_row <- auc_syn[auc_syn$Metric == "CI", , drop = FALSE]
+  summary <- tibble::tibble(
+    combination_arm_id = combo_arm_id,
+    combination_treatment = combo_treatment,
+    metric = "AUC",
+    method = method,
+    observed = mean(boot_scores$observed, na.rm = TRUE),
+    expected = mean(boot_scores$expected, na.rm = TRUE),
+    synergy_score = synergy_row$Value[[1]],
+    lb = synergy_row$lb[[1]],
+    ub = synergy_row$ub[[1]],
+    ci_value = ci_row$Value[[1]],
+    p_value_synergy = synergy_row$`p.val.Synergy`[[1]],
+    p_value_antagonism = synergy_row$`p.val.Antagonism`[[1]]
+  ) |>
+    dplyr::mutate(
+      interpretation = interpret_score(.data$lb, .data$ub)
+    )
+  bootstrap <- dplyr::mutate(
+    boot_scores,
+    combination_arm_id = combo_arm_id,
+    combination_treatment = combo_treatment,
+    metric = "AUC",
+    .before = 1
+  )
+  return(list(summary = summary, bootstrap = bootstrap))
 }
 
 rank_combination_results <- function(results) {
@@ -143,28 +139,59 @@ analysis_snapshot_id <- function(tv, role_map, comparator_map, settings) {
   return(digest::digest(list(tv, role_map, comparator_map, settings), algo = "xxhash64"))
 }
 
+analyze_combination_with_package <- function(tv, role_map, comparator_map, combo_arm_id, settings) {
+  combo_tv <- build_analysis_tv(tv, role_map, comparator_map, combo_arm_id)
+  combo_treatment <- lookup_treatment(role_map, combo_arm_id)
+  if (settings$metric == "TGI") {
+    tgi_lst <- getTGI(
+      combo_tv,
+      sel_day = settings$selected_day,
+      tv_var = settings$tv_var,
+      ci = settings$conf,
+      n_rep = settings$boot_n
+    )
+    tgi_syn <- TGI_synergy(
+      tgi_lst,
+      method = settings$method,
+      ci = settings$conf,
+      display = FALSE,
+      save = FALSE
+    )
+    boot_scores <- package_tgi_bootstrap(tgi_lst, settings$method)
+    return(summarize_tgi_result(combo_arm_id, combo_treatment, settings$method, tgi_syn, boot_scores))
+  }
+  auc_lst <- get_mAUCr(
+    combo_tv,
+    sel_day = settings$end_day,
+    ci = settings$conf,
+    nrep = settings$boot_n
+  )
+  auc_syn <- AUC_synergy(
+    auc_lst,
+    t = settings$end_day,
+    method = settings$method,
+    boot_n = settings$boot_n,
+    ci = settings$conf,
+    save = FALSE,
+    display = FALSE
+  )
+  boot_scores <- package_auc_bootstrap(
+    auc_lst,
+    end_day = settings$end_day,
+    method = settings$method,
+    boot_n = settings$boot_n
+  )
+  return(summarize_auc_result(combo_arm_id, combo_treatment, settings$method, auc_syn, boot_scores))
+}
+
 analyze_combinations <- function(tv, role_map, comparator_map, settings) {
-  vehicle <- role_map$arm_id[role_map$role == "Vehicle"][[1]]
   combos <- role_map$arm_id[role_map$role == "Combination"]
-  analyses <- purrr::map(combos, function(combo) {
-    comparators <- comparator_map$comparator_arm_id[
-      comparator_map$combination_arm_id == combo
-    ]
-    if (settings$metric == "TGI") {
-      return(analyze_tgi_combination(
-        tv, vehicle, comparators, combo, settings$selected_day,
-        settings$tv_var, settings$method, settings$boot_n, settings$conf
-      ))
-    }
-    return(analyze_auc_combination(
-      tv, vehicle, comparators, combo, settings$end_day,
-      settings$method, settings$boot_n, settings$conf
-    ))
-  })
+  analyses <- purrr::map(
+    combos,
+    ~ analyze_combination_with_package(tv, role_map, comparator_map, .x, settings)
+  )
   summaries <- purrr::map_dfr(analyses, "summary") |>
     rank_combination_results()
-  bootstraps <- purrr::map2_dfr(analyses, combos, function(x, combo) {
-    return(dplyr::mutate(x$bootstrap, combination_arm_id = combo, .before = 1))
-  })
+  bootstraps <- purrr::map_dfr(analyses, "bootstrap")
   return(list(summary = summaries, bootstrap = bootstraps))
 }

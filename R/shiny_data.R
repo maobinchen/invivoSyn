@@ -3,6 +3,16 @@ make_arm_id <- function(x) {
   return(ids)
 }
 
+lookup_treatment <- function(role_map, arm_id) {
+  value <- role_map$Treatment[match(arm_id, role_map$arm_id)]
+  return(as.character(value[[1]]))
+}
+
+lookup_arm_id <- function(role_map, treatment) {
+  value <- role_map$arm_id[match(treatment, role_map$Treatment)]
+  return(as.character(value[[1]]))
+}
+
 suggest_tv_columns <- function(data) {
   nm <- names(data)
   lower <- tolower(nm)
@@ -71,6 +81,18 @@ build_comparator_map <- function(role_map, comparator_map) {
   return(out)
 }
 
+build_combo_role_args <- function(role_map, comparator_map, combo_arm_id) {
+  vehicle_arm_id <- role_map$arm_id[role_map$role == "Vehicle"]
+  comparator_arm_ids <- comparator_map$comparator_arm_id[
+    comparator_map$combination_arm_id == combo_arm_id
+  ]
+  return(list(
+    vehicle = lookup_treatment(role_map, vehicle_arm_id[[1]]),
+    singles = unname(vapply(comparator_arm_ids, lookup_treatment, character(1), role_map = role_map)),
+    combo = lookup_treatment(role_map, combo_arm_id)
+  ))
+}
+
 suggest_comparator_map <- function(role_map) {
   singles <- role_map |>
     dplyr::filter(.data$role == "Single agent")
@@ -108,6 +130,24 @@ latest_common_day <- function(tv, arm_ids, min_observations = 2L) {
     return(NA_real_)
   }
   return(max(valid_days$Day))
+}
+
+build_analysis_tv <- function(tv, role_map, comparator_map, combo_arm_id) {
+  role_args <- build_combo_role_args(role_map, comparator_map, combo_arm_id)
+  out <- set_roles(
+    tv,
+    vehicle = role_args$vehicle,
+    singles = role_args$singles,
+    combo = role_args$combo
+  )
+  roles_full <- attr(out, "roles")
+  out <- dplyr::mutate(
+    out,
+    Mouse = paste(as.character(.data$Treatment), .data$Mouse, sep = "::")
+  )
+  attr(out, "roles") <- roles_full
+  attr(out, "analysis_combo_arm_id") <- combo_arm_id
+  return(out)
 }
 
 normalize_tv_long <- function(data, treatment_col, mouse_col, day_col, tv_col) {

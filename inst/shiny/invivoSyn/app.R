@@ -14,7 +14,13 @@ APP_HELPERS <- c(
   "suggest_tv_columns", "normalize_tv_long", "normalize_tv_wide",
   "suggest_arm_roles", "suggest_comparator_map",
   "validate_invivosyn_experiment", "analysis_snapshot_id",
-  "analyze_combinations"
+  "analyze_combinations", "build_analysis_tv", "build_combo_role_args",
+  "latest_common_day", "lookup_treatment", "lookup_arm_id"
+)
+
+PACKAGE_APIS <- c(
+  "set_roles", "get_roles", "getTGI", "get_mAUCr",
+  "TGI_synergy", "AUC_synergy"
 )
 
 app_env <- environment()
@@ -35,14 +41,17 @@ if (!is.na(source_root)) {
     source_files,
     ~ sys.source(file.path(source_root, .x), envir = app_env)
   )
-} else {
-  if (!requireNamespace("invivoSyn", quietly = TRUE)) {
-    stop("Install invivoSyn or run the app from the invivoSyn package checkout.")
-  }
-  purrr::walk(APP_HELPERS, function(helper) {
-    assign(helper, getFromNamespace(helper, "invivoSyn"), envir = app_env)
-  })
 }
+
+if (!requireNamespace("invivoSyn", quietly = TRUE)) {
+  stop("Install invivoSyn or load the invivoSyn package before running the app.")
+}
+
+purrr::walk(c(APP_HELPERS, PACKAGE_APIS), function(helper) {
+  if (!exists(helper, envir = app_env, inherits = FALSE)) {
+    assign(helper, getFromNamespace(helper, "invivoSyn"), envir = app_env)
+  }
+})
 
 purrr::walk(
   list.files("R", pattern = "\\.R$", full.names = TRUE),

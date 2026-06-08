@@ -82,11 +82,15 @@ analysis_server <- function(id, tv, role_map, comparator_map, validation) {
     shiny::observe({
       shiny::req(snapshot())
       result <- snapshot()$result$summary
-      shiny::updateSelectInput(session, "combo", choices = result$combination_arm_id)
+      shiny::updateSelectInput(
+        session,
+        "combo",
+        choices = stats::setNames(result$combination_treatment, result$combination_treatment)
+      )
     })
     detail <- shiny::reactive({
       shiny::req(snapshot(), input$combo)
-      dplyr::filter(snapshot()$result$summary, .data$combination_arm_id == input$combo)
+      dplyr::filter(snapshot()$result$summary, .data$combination_treatment == input$combo)
     })
     output$detail <- DT::renderDT(DT::datatable(detail()))
     output$bootstrap <- plotly::renderPlotly({

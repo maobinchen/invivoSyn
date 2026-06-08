@@ -33,8 +33,8 @@ growth_plot <- function(tv, y = "TV") {
     ggplot2::labs(y = y, color = "Treatment"))
 }
 
-bootstrap_plot <- function(bootstrap, combination_arm_id) {
-  data <- dplyr::filter(bootstrap, .data$combination_arm_id == combination_arm_id)
+bootstrap_plot <- function(bootstrap, combination_treatment) {
+  data <- dplyr::filter(bootstrap, .data$combination_treatment == combination_treatment)
   return(ggplot2::ggplot(data, ggplot2::aes(x = .data$score)) +
     ggplot2::geom_histogram(bins = 35, fill = "#4C78A8", alpha = 0.75) +
     ggplot2::geom_vline(xintercept = 0, linetype = 2, color = "#B22222") +
