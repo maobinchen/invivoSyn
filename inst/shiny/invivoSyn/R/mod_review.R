@@ -10,6 +10,7 @@ review_ui <- function(id) {
     ),
     bslib::layout_columns(
       bslib::card(bslib::card_header("Validation"), DT::DTOutput(ns("issues"))),
+      bslib::card(bslib::card_header("Endpoint Summary"), DT::DTOutput(ns("summary"))),
       bslib::card(
         full_screen = TRUE, bslib::card_header("Tumor-growth curves"),
         shiny::selectInput(ns("y"), "Display", c("TV", "RTV", "DeltaTV", "logTV")),
@@ -28,7 +29,10 @@ review_server <- function(id, tv, role_map, comparator_map) {
     output$n_combos <- shiny::renderText(sum(role_map()$role == "Combination"))
     output$n_mice <- shiny::renderText(nrow(dplyr::distinct(tv(), .data$arm_id, .data$Mouse)))
     output$n_days <- shiny::renderText(dplyr::n_distinct(tv()$Day))
-    output$issues <- DT::renderDT(DT::datatable(dplyr::bind_rows(validation()$errors, validation()$warnings)))
+    output$issues <- DT::renderDT(format_dt_table(dplyr::bind_rows(validation()$errors, validation()$warnings)))
+    output$summary <- DT::renderDT({
+      format_dt_table(summarize_endpoint_wide(tv(), input$y), options = list(scrollX = TRUE, pageLength = 10))
+    })
     output$growth <- plotly::renderPlotly(plotly::ggplotly(growth_plot(tv(), input$y), tooltip = "text"))
     return(validation)
   })

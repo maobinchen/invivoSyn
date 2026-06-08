@@ -18,8 +18,25 @@ package_tgi_bootstrap <- function(tgi_lst, method = c("Bliss", "HSA")) {
   ))
 }
 
+extract_auc_bootstrap_values <- function(values) {
+  value_names <- names(values)
+  if (!is.null(value_names) && all(c("CI", "Synergy_score") %in% value_names)) {
+    return(list(
+      ci_value = unname(values[["CI"]]),
+      synergy_score = unname(values[["Synergy_score"]])
+    ))
+  }
+  if (length(values) >= 2L) {
+    return(list(
+      ci_value = unname(values[[1]]),
+      synergy_score = unname(values[[2]])
+    ))
+  }
+  rlang::abort("AUC bootstrap returned an unexpected result shape.")
+}
+
 package_auc_bootstrap <- function(
-    auc_lst, end_day, method = c("Bliss", "HSA"), boot_n = 1000L,
+    auc_lst, estimate_day, method = c("Bliss", "HSA"), boot_n = 1000L,
     seed = 123456L) {
   method <- match.arg(method)
   roles <- auc_lst$roles
@@ -31,15 +48,20 @@ package_auc_bootstrap <- function(
     simplify = FALSE
   )
   boot_scores <- purrr::map_dfr(seq_along(boot_idx), function(iteration) {
-    values <- getFromNamespace("bs_AUC_synergy", "invivoSyn")(
-      auc_mouse = auc_mouse,
-      t = end_day,
-      method = method,
-      roles = roles,
-      idx = boot_idx[[iteration]]
-    )
-    ci_value <- unname(values[["CI"]])
-    synergy_score <- unname(values[["Synergy_score"]])
+    extracted <- tryCatch({
+      values <- getFromNamespace("bs_AUC_synergy", "invivoSyn")(
+        auc_mouse = auc_mouse,
+        t = estimate_day,
+        method = method,
+        roles = roles,
+        idx = boot_idx[[iteration]]
+      )
+      extract_auc_bootstrap_values(values)
+    }, error = function(...) {
+      list(ci_value = NA_real_, synergy_score = NA_real_)
+    })
+    ci_value <- extracted$ci_value
+    synergy_score <- extracted$synergy_score
     if (isTRUE(all.equal(ci_value, 1))) {
       expected <- NA_real_
       observed <- NA_real_
@@ -55,6 +77,24 @@ package_auc_bootstrap <- function(
     ))
   })
   return(boot_scores)
+}
+
+package_auc_point_estimate <- function(auc_lst, estimate_day, method = c("Bliss", "HSA")) {
+  method <- match.arg(method)
+  auc_mouse <- as.data.frame(auc_lst$auc_mouse)
+  roles <- auc_lst$roles
+  return(tryCatch({
+    values <- getFromNamespace("bs_AUC_synergy", "invivoSyn")(
+      auc_mouse = auc_mouse,
+      t = estimate_day,
+      method = method,
+      roles = roles,
+      idx = seq_len(nrow(auc_mouse))
+    )
+    extract_auc_bootstrap_values(values)
+  }, error = function(...) {
+    list(ci_value = NA_real_, synergy_score = NA_real_)
+  }))
 }
 
 interpret_score <- function(lb, ub) {
@@ -99,22 +139,30 @@ summarize_tgi_result <- function(combo_arm_id, combo_treatment, method, tgi_syn,
   return(list(summary = summary, bootstrap = bootstrap))
 }
 
-summarize_auc_result <- function(combo_arm_id, combo_treatment, method, auc_syn, boot_scores) {
-  synergy_row <- auc_syn[auc_syn$Metric == "Synergy_score", , drop = FALSE]
-  ci_row <- auc_syn[auc_syn$Metric == "CI", , drop = FALSE]
+summarize_auc_result <- function(combo_arm_id, combo_treatment, method, point_estimate, boot_scores, conf = 0.95) {
+  ci_value <- point_estimate$ci_value
+  synergy_score <- point_estimate$synergy_score
+  alpha <- (1 - conf) / 2
+  if (isTRUE(all.equal(ci_value, 1))) {
+    observed <- NA_real_
+    expected <- NA_real_
+  } else {
+    expected <- (synergy_score / 100) / (1 - ci_value)
+    observed <- ci_value * expected
+  }
   summary <- tibble::tibble(
     combination_arm_id = combo_arm_id,
     combination_treatment = combo_treatment,
     metric = "AUC",
     method = method,
-    observed = mean(boot_scores$observed, na.rm = TRUE),
-    expected = mean(boot_scores$expected, na.rm = TRUE),
-    synergy_score = synergy_row$Value[[1]],
-    lb = synergy_row$lb[[1]],
-    ub = synergy_row$ub[[1]],
-    ci_value = ci_row$Value[[1]],
-    p_value_synergy = synergy_row$`p.val.Synergy`[[1]],
-    p_value_antagonism = synergy_row$`p.val.Antagonism`[[1]]
+    observed = observed,
+    expected = expected,
+    synergy_score = synergy_score,
+    lb = stats::quantile(boot_scores$score, alpha, na.rm = TRUE, names = FALSE),
+    ub = stats::quantile(boot_scores$score, 1 - alpha, na.rm = TRUE, names = FALSE),
+    ci_value = ci_value,
+    p_value_synergy = mean(boot_scores$score <= 0, na.rm = TRUE),
+    p_value_antagonism = mean(boot_scores$score >= 0, na.rm = TRUE)
   ) |>
     dplyr::mutate(
       interpretation = interpret_score(.data$lb, .data$ub)
@@ -166,22 +214,28 @@ analyze_combination_with_package <- function(tv, role_map, comparator_map, combo
     ci = settings$conf,
     nrep = settings$boot_n
   )
-  auc_syn <- AUC_synergy(
-    auc_lst,
-    t = settings$end_day,
-    method = settings$method,
-    boot_n = settings$boot_n,
-    ci = settings$conf,
-    save = FALSE,
-    display = FALSE
-  )
   boot_scores <- package_auc_bootstrap(
     auc_lst,
-    end_day = settings$end_day,
+    estimate_day = settings$auc_t,
     method = settings$method,
     boot_n = settings$boot_n
   )
-  return(summarize_auc_result(combo_arm_id, combo_treatment, settings$method, auc_syn, boot_scores))
+  point_estimate <- package_auc_point_estimate(
+    auc_lst,
+    estimate_day = settings$auc_t,
+    method = settings$method
+  )
+  if (is.na(point_estimate$synergy_score)) {
+    point_estimate$synergy_score <- mean(boot_scores$score, na.rm = TRUE)
+  }
+  return(summarize_auc_result(
+    combo_arm_id,
+    combo_treatment,
+    settings$method,
+    point_estimate,
+    boot_scores,
+    conf = settings$conf
+  ))
 }
 
 analyze_combinations <- function(tv, role_map, comparator_map, settings) {

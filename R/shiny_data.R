@@ -187,7 +187,11 @@ normalize_tv_long <- function(data, treatment_col, mouse_col, day_col, tv_col) {
 }
 
 normalize_tv_wide <- function(data, treatment_col, mouse_col) {
-  day_cols <- setdiff(names(data), c(treatment_col, mouse_col))
+  candidate_cols <- setdiff(names(data), c(treatment_col, mouse_col))
+  day_cols <- candidate_cols[!is.na(suppressWarnings(as.numeric(candidate_cols)))]
+  if (length(day_cols) == 0L) {
+    rlang::abort("No numeric day columns were found after excluding treatment and mouse columns.")
+  }
   long <- data |>
     tidyr::pivot_longer(
       dplyr::all_of(day_cols),

@@ -3,8 +3,9 @@ analysis_ui <- function(id) {
   sidebar <- bslib::sidebar(
     shiny::radioButtons(ns("metric"), "Metric", c("TGI", "AUC")),
     shiny::radioButtons(ns("method"), "Reference model", c("Bliss", "HSA"), inline = TRUE),
-    shiny::numericInput(ns("selected_day"), "TGI analysis day", 21, min = 0),
-    shiny::numericInput(ns("end_day"), "AUC end day", 21, min = 1),
+    shiny::selectInput(ns("selected_day"), "TGI analysis day", choices = NULL),
+    shiny::selectInput(ns("end_day"), "AUC end day", choices = NULL),
+    shiny::numericInput(ns("auc_t"), "AUC survival-estimation day", 21, min = 1),
     shiny::radioButtons(ns("tv_var"), "TGI variable", c("DeltaTV", "RTV"), inline = TRUE),
     shiny::selectInput(ns("conf"), "Confidence level", c("90%" = 0.9, "95%" = 0.95), 0.95),
     shiny::numericInput(ns("boot_n"), "Bootstrap replicates", 1000, min = 100, step = 100),
@@ -26,9 +27,18 @@ analysis_ui <- function(id) {
 
 analysis_server <- function(id, tv, role_map, comparator_map, validation) {
   shiny::moduleServer(id, function(input, output, session) {
+    valid_days <- shiny::reactive({
+      shiny::req(tv())
+      sort(unique(stats::na.omit(tv()$Day)))
+    })
     settings <- shiny::reactive(list(
-      metric = input$metric, method = input$method, selected_day = input$selected_day,
-      end_day = input$end_day, tv_var = input$tv_var, conf = as.numeric(input$conf),
+      metric = input$metric,
+      method = input$method,
+      selected_day = as.numeric(input$selected_day),
+      end_day = if (identical(input$end_day, "__all__")) NA_real_ else as.numeric(input$end_day),
+      auc_t = as.numeric(input$auc_t),
+      tv_var = input$tv_var,
+      conf = as.numeric(input$conf),
       boot_n = as.integer(input$boot_n)
     ))
     current_id <- shiny::reactive(analysis_snapshot_id(tv(), role_map(), comparator_map(), settings()))
@@ -52,7 +62,22 @@ analysis_server <- function(id, tv, role_map, comparator_map, validation) {
     output$state <- shiny::renderText(if (stale()) "Results are stale. Run analysis again." else "Results match current inputs.")
     output$summary <- DT::renderDT({
       shiny::req(snapshot())
-      DT::datatable(snapshot()$result$summary, options = list(scrollX = TRUE))
+      format_dt_table(snapshot()$result$summary, options = list(scrollX = TRUE))
+    })
+    shiny::observe({
+      days <- valid_days()
+      shiny::updateSelectInput(
+        session,
+        "selected_day",
+        choices = stats::setNames(as.character(days), as.character(days)),
+        selected = as.character(max(days))
+      )
+      shiny::updateSelectInput(
+        session,
+        "end_day",
+        choices = c("All data" = "__all__", stats::setNames(as.character(days), as.character(days))),
+        selected = "__all__"
+      )
     })
     shiny::observe({
       req(tv(), role_map(), comparator_map())
@@ -76,7 +101,7 @@ analysis_server <- function(id, tv, role_map, comparator_map, validation) {
       })
       candidate_days <- candidate_days[!is.na(candidate_days)]
       if (length(candidate_days) > 0) {
-        shiny::updateNumericInput(session, "selected_day", value = min(candidate_days))
+        shiny::updateSelectInput(session, "selected_day", selected = as.character(min(candidate_days)))
       }
     })
     shiny::observe({
@@ -92,7 +117,7 @@ analysis_server <- function(id, tv, role_map, comparator_map, validation) {
       shiny::req(snapshot(), input$combo)
       dplyr::filter(snapshot()$result$summary, .data$combination_treatment == input$combo)
     })
-    output$detail <- DT::renderDT(DT::datatable(detail()))
+    output$detail <- DT::renderDT(format_dt_table(detail()))
     output$bootstrap <- plotly::renderPlotly({
       shiny::req(snapshot(), input$combo)
       plotly::ggplotly(bootstrap_plot(snapshot()$result$bootstrap, input$combo))

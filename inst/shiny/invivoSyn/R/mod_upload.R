@@ -56,7 +56,7 @@ upload_server <- function(id) {
       }
       return(normalize_tv_wide(data, input$treatment, input$mouse))
     })
-    output$preview <- DT::renderDT(DT::datatable(parsed(), options = list(scrollX = TRUE)))
+    output$preview <- DT::renderDT(format_dt_table(parsed(), options = list(scrollX = TRUE)))
     output$status <- shiny::renderText({
       data <- parsed()
       paste(nrow(data), "normalized observations across", dplyr::n_distinct(data$Treatment), "arms.")
