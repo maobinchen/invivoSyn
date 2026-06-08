@@ -31,11 +31,11 @@ analysis_server <- function(id, tv, role_map, comparator_map, validation) {
       end_day = input$end_day, tv_var = input$tv_var, conf = as.numeric(input$conf),
       boot_n = as.integer(input$boot_n)
     ))
-    current_id <- shiny::reactive(invivoSyn:::analysis_snapshot_id(tv(), role_map(), comparator_map(), settings()))
+    current_id <- shiny::reactive(analysis_snapshot_id(tv(), role_map(), comparator_map(), settings()))
     snapshot <- shiny::eventReactive(input$run, {
       shiny::validate(shiny::need(validation()$valid, "Resolve validation errors before analysis."))
       shiny::withProgress(message = "Running Combination analyses", value = 0.2, {
-        result <- invivoSyn:::analyze_combinations(tv(), role_map(), comparator_map(), settings())
+        result <- analyze_combinations(tv(), role_map(), comparator_map(), settings())
         shiny::incProgress(0.7)
         return(list(
           id = current_id(), tv = tv(), role_map = role_map(),

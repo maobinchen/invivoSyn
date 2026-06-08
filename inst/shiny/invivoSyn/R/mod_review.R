@@ -21,7 +21,7 @@ review_ui <- function(id) {
 
 review_server <- function(id, tv, role_map, comparator_map, selected_day) {
   shiny::moduleServer(id, function(input, output, session) {
-    validation <- shiny::reactive(invivoSyn:::validate_invivosyn_experiment(
+    validation <- shiny::reactive(validate_invivosyn_experiment(
       tv(), role_map(), comparator_map(), selected_day()
     ))
     output$n_arms <- shiny::renderText(dplyr::n_distinct(tv()$arm_id))

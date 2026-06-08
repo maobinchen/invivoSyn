@@ -9,6 +9,41 @@ suppressPackageStartupMessages({
 })
 
 options(shiny.maxRequestSize = 500 * 1024^2)
+
+APP_HELPERS <- c(
+  "suggest_tv_columns", "normalize_tv_long", "normalize_tv_wide",
+  "suggest_arm_roles", "suggest_comparator_map",
+  "validate_invivosyn_experiment", "analysis_snapshot_id",
+  "analyze_combinations"
+)
+
+app_env <- environment()
+source_files <- c("shiny_data.R", "shiny_validation.R", "shiny_analysis.R")
+source_roots <- c(
+  file.path("..", "..", "..", "R"),
+  file.path("..", "..", "R")
+)
+has_source_files <- vapply(
+  source_roots,
+  function(root) all(file.exists(file.path(root, source_files))),
+  logical(1)
+)
+source_root <- source_roots[has_source_files][1]
+
+if (!is.na(source_root)) {
+  purrr::walk(
+    source_files,
+    ~ sys.source(file.path(source_root, .x), envir = app_env)
+  )
+} else {
+  if (!requireNamespace("invivoSyn", quietly = TRUE)) {
+    stop("Install invivoSyn or run the app from the invivoSyn package checkout.")
+  }
+  purrr::walk(APP_HELPERS, function(helper) {
+    assign(helper, getFromNamespace(helper, "invivoSyn"), envir = app_env)
+  })
+}
+
 purrr::walk(list.files("R", pattern = "\\.R$", full.names = TRUE), source)
 
 ui <- bslib::page_navbar(

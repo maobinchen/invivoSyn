@@ -34,7 +34,7 @@ upload_server <- function(id) {
     })
     output$mapping_ui <- shiny::renderUI({
       data <- raw()
-      suggestion <- invivoSyn:::suggest_tv_columns(data)
+      suggestion <- suggest_tv_columns(data)
       choices <- names(data)
       shiny::tagList(
         shiny::selectInput(session$ns("treatment"), "Treatment column", choices, suggestion$treatment),
@@ -48,9 +48,9 @@ upload_server <- function(id) {
       fmt <- input$format
       if (fmt == "auto") fmt <- if (nzchar(input$day) && nzchar(input$tv)) "long" else "wide"
       if (fmt == "long") {
-        return(invivoSyn:::normalize_tv_long(data, input$treatment, input$mouse, input$day, input$tv))
+        return(normalize_tv_long(data, input$treatment, input$mouse, input$day, input$tv))
       }
-      return(invivoSyn:::normalize_tv_wide(data, input$treatment, input$mouse))
+      return(normalize_tv_wide(data, input$treatment, input$mouse))
     })
     output$preview <- DT::renderDT(DT::datatable(parsed(), options = list(scrollX = TRUE)))
     output$status <- shiny::renderText({

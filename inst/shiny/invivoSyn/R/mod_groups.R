@@ -9,7 +9,7 @@ groups_ui <- function(id) {
 
 groups_server <- function(id, tv) {
   shiny::moduleServer(id, function(input, output, session) {
-    suggested <- shiny::reactive(invivoSyn:::suggest_arm_roles(unique(tv()$Treatment)))
+    suggested <- shiny::reactive(suggest_arm_roles(unique(tv()$Treatment)))
     output$roles_ui <- shiny::renderUI({
       purrr::map2(suggested()$arm_id, suggested()$Treatment, function(arm, label) {
         selected <- suggested()$role[suggested()$arm_id == arm]
@@ -25,7 +25,7 @@ groups_server <- function(id, tv) {
     })
     output$comparators_ui <- shiny::renderUI({
       roles <- role_map()
-      suggested_map <- invivoSyn:::suggest_comparator_map(roles)
+      suggested_map <- suggest_comparator_map(roles)
       singles <- roles |>
         dplyr::filter(.data$role == "Single agent")
       combos <- roles |>
