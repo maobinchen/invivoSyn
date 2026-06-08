@@ -1,20 +1,40 @@
 review_ui <- function(id) {
   ns <- shiny::NS(id)
   return(shiny::tagList(
-    bslib::layout_column_wrap(
-      width = 1 / 4,
-      bslib::value_box("Arms", shiny::textOutput(ns("n_arms")), theme = "primary"),
-      bslib::value_box("Combinations", shiny::textOutput(ns("n_combos")), theme = "info"),
-      bslib::value_box("Mice", shiny::textOutput(ns("n_mice")), theme = "success"),
-      bslib::value_box("Study days", shiny::textOutput(ns("n_days")), theme = "warning")
+    bslib::layout_columns(
+      col_widths = c(3, 3, 3, 3),
+      bslib::card(
+        class = "py-1",
+        bslib::card_body(shiny::tags$small("Arms"), shiny::tags$div(class = "fs-5 fw-semibold", shiny::textOutput(ns("n_arms"))))
+      ),
+      bslib::card(
+        class = "py-1",
+        bslib::card_body(shiny::tags$small("Combinations"), shiny::tags$div(class = "fs-5 fw-semibold", shiny::textOutput(ns("n_combos"))))
+      ),
+      bslib::card(
+        class = "py-1",
+        bslib::card_body(shiny::tags$small("Mice"), shiny::tags$div(class = "fs-5 fw-semibold", shiny::textOutput(ns("n_mice"))))
+      ),
+      bslib::card(
+        class = "py-1",
+        bslib::card_body(shiny::tags$small("Study days"), shiny::tags$div(class = "fs-5 fw-semibold", shiny::textOutput(ns("n_days"))))
+      )
     ),
     bslib::layout_columns(
-      bslib::card(bslib::card_header("Validation"), DT::DTOutput(ns("issues"))),
-      bslib::card(bslib::card_header("Endpoint Summary"), DT::DTOutput(ns("summary"))),
+      col_widths = c(8, 4),
+      bslib::layout_column_wrap(
+        width = 1,
+        heights_equal = "row",
+        bslib::card(bslib::card_header("Endpoint Summary"), DT::DTOutput(ns("summary"))),
+        bslib::card(
+          full_screen = TRUE, bslib::card_header("Tumor-growth curves"),
+          shiny::selectInput(ns("y"), "Display", c("TV", "RTV", "DeltaTV", "logTV")),
+          plotly::plotlyOutput(ns("growth"))
+        )
+      ),
       bslib::card(
-        full_screen = TRUE, bslib::card_header("Tumor-growth curves"),
-        shiny::selectInput(ns("y"), "Display", c("TV", "RTV", "DeltaTV", "logTV")),
-        plotly::plotlyOutput(ns("growth"))
+        bslib::card_header("Validation"),
+        DT::DTOutput(ns("issues"))
       )
     )
   ))

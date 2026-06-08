@@ -14,13 +14,19 @@ analysis_ui <- function(id) {
   )
   return(bslib::layout_sidebar(
     sidebar = sidebar,
-    bslib::card(bslib::card_header("Ranked Combination summary"), DT::DTOutput(ns("summary"))),
-    bslib::layout_columns(
-      bslib::card(bslib::card_header("Combination detail"),
-        shiny::selectInput(ns("combo"), "Combination", choices = NULL),
-        DT::DTOutput(ns("detail"))
-      ),
-      bslib::card(full_screen = TRUE, bslib::card_header("Bootstrap distribution"), plotly::plotlyOutput(ns("bootstrap")))
+    bslib::card(
+      full_screen = TRUE,
+      bslib::card_header(shiny::textOutput(ns("results_header"))),
+      shiny::selectInput(ns("combo"), "Combination", choices = NULL),
+      bslib::navset_card_tab(
+        bslib::nav_panel("Efficacy", DT::DTOutput(ns("efficacy"))),
+        bslib::nav_panel("Synergy", DT::DTOutput(ns("synergy")))
+      )
+    ),
+    bslib::card(
+      full_screen = TRUE,
+      bslib::card_header("Package bootstrap figure"),
+      shiny::imageOutput(ns("bootstrap"), height = "520px")
     )
   ))
 }
@@ -43,8 +49,7 @@ analysis_server <- function(id, tv, role_map, comparator_map, validation) {
     ))
     current_id <- shiny::reactive(analysis_snapshot_id(tv(), role_map(), comparator_map(), settings()))
     analysis_validation <- shiny::reactive({
-      day_value <- if (identical(input$metric, "TGI")) input$selected_day else NULL
-      validate_invivosyn_experiment(tv(), role_map(), comparator_map(), day_value)
+      validate_invivosyn_experiment(tv(), role_map(), comparator_map(), input$selected_day)
     })
     snapshot <- shiny::eventReactive(input$run, {
       shiny::validate(shiny::need(validation()$valid, "Resolve review validation errors before analysis."))
@@ -53,16 +58,20 @@ analysis_server <- function(id, tv, role_map, comparator_map, validation) {
         result <- analyze_combinations(tv(), role_map(), comparator_map(), settings())
         shiny::incProgress(0.7)
         return(list(
-          id = current_id(), tv = tv(), role_map = role_map(),
-          comparator_map = comparator_map(), settings = settings(), result = result
+          id = current_id(),
+          tv = tv(),
+          role_map = role_map(),
+          comparator_map = comparator_map(),
+          settings = settings(),
+          result = result
         ))
       })
     })
     stale <- shiny::reactive(!is.null(snapshot()) && !identical(snapshot()$id, current_id()))
     output$state <- shiny::renderText(if (stale()) "Results are stale. Run analysis again." else "Results match current inputs.")
-    output$summary <- DT::renderDT({
-      shiny::req(snapshot())
-      format_dt_table(snapshot()$result$summary, options = list(scrollX = TRUE))
+    output$results_header <- shiny::renderText({
+      metric <- if (!is.null(snapshot())) snapshot()$result$metric else input$metric
+      paste0("Package-native Combination results (", metric, ")")
     })
     shiny::observe({
       days <- valid_days()
@@ -80,48 +89,41 @@ analysis_server <- function(id, tv, role_map, comparator_map, validation) {
       )
     })
     shiny::observe({
-      req(tv(), role_map(), comparator_map())
-      if (!identical(input$metric, "TGI")) {
-        return()
-      }
-      combos <- role_map()$arm_id[role_map()$role == "Combination"]
-      vehicles <- role_map()$arm_id[role_map()$role == "Vehicle"]
-      if (length(vehicles) != 1L || length(combos) == 0L) {
-        return()
-      }
-      vehicle <- vehicles[[1]]
-      candidate_days <- purrr::map_dbl(combos, function(combo) {
-        comparators <- comparator_map()$comparator_arm_id[
-          comparator_map()$combination_arm_id == combo
-        ]
-        if (length(comparators) == 0L) {
-          return(NA_real_)
-        }
-        latest_common_day(tv(), c(vehicle, comparators, combo))
-      })
-      candidate_days <- candidate_days[!is.na(candidate_days)]
-      if (length(candidate_days) > 0) {
-        shiny::updateSelectInput(session, "selected_day", selected = as.character(min(candidate_days)))
-      }
+      shiny::req(tv(), role_map())
+      # Default the TGI analysis day to the last day on which every arm still has
+      # at least 80% of its baseline animals measured.
+      coverage_day <- latest_coverage_day(tv(), role_map()$arm_id, min_prop = 0.8)
+      selected <- if (is.na(coverage_day)) max(valid_days()) else coverage_day
+      shiny::updateSelectInput(session, "selected_day", selected = as.character(selected))
     })
     shiny::observe({
       shiny::req(snapshot())
-      result <- snapshot()$result$summary
       shiny::updateSelectInput(
         session,
         "combo",
-        choices = stats::setNames(result$combination_treatment, result$combination_treatment)
+        choices = stats::setNames(
+          names(snapshot()$result$details),
+          names(snapshot()$result$details)
+        )
       )
     })
-    detail <- shiny::reactive({
+    combo_detail <- shiny::reactive({
       shiny::req(snapshot(), input$combo)
-      dplyr::filter(snapshot()$result$summary, .data$combination_treatment == input$combo)
+      snapshot()$result$details[[input$combo]]
     })
-    output$detail <- DT::renderDT(format_dt_table(detail()))
-    output$bootstrap <- plotly::renderPlotly({
-      shiny::req(snapshot(), input$combo)
-      plotly::ggplotly(bootstrap_plot(snapshot()$result$bootstrap, input$combo))
+    output$efficacy <- DT::renderDT({
+      shiny::req(combo_detail())
+      format_dt_table(combo_detail()$efficacy, options = list(scrollX = TRUE))
     })
+    output$synergy <- DT::renderDT({
+      shiny::req(combo_detail())
+      format_dt_table(as_display_table(combo_detail()$synergy), options = list(scrollX = TRUE))
+    })
+    output$bootstrap <- shiny::renderImage({
+      shiny::req(combo_detail())
+      list(src = combo_detail()$figure, contentType = "image/png",
+           alt = paste(combo_detail()$metric, "package figure"))
+    }, deleteFile = FALSE)
     return(list(snapshot = snapshot, stale = stale))
   })
 }

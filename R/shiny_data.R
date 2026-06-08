@@ -132,6 +132,44 @@ latest_common_day <- function(tv, arm_ids, min_observations = 2L) {
   return(max(valid_days$Day))
 }
 
+latest_coverage_day <- function(tv, arm_ids, min_prop = 0.8) {
+  arm_ids <- unique(arm_ids)
+  measured <- tv |>
+    dplyr::filter(.data$arm_id %in% arm_ids, !is.na(.data$TV))
+  if (nrow(measured) == 0L) {
+    return(NA_real_)
+  }
+
+  # Baseline = mice measured on the arm's earliest day (data is not rebased to
+  # Day 0, so anchor on each arm's own first measured day).
+  baseline <- measured |>
+    dplyr::mutate(min_day = min(.data$Day), .by = "arm_id") |>
+    dplyr::filter(.data$Day == .data$min_day) |>
+    dplyr::summarise(baseline_n = dplyr::n_distinct(.data$Mouse), .by = "arm_id") |>
+    dplyr::filter(.data$baseline_n > 0)
+
+  if (nrow(baseline) != length(arm_ids)) {
+    return(NA_real_)
+  }
+
+  # Complete the arm x day grid so a day on which any arm is entirely unmeasured
+  # (n = 0) fails the coverage check rather than being silently skipped.
+  valid_days <- measured |>
+    dplyr::summarise(n = dplyr::n_distinct(.data$Mouse), .by = c("arm_id", "Day")) |>
+    tidyr::complete(arm_id = arm_ids, Day, fill = list(n = 0)) |>
+    dplyr::left_join(baseline, by = "arm_id") |>
+    dplyr::mutate(ok = .data$n >= (.data$baseline_n * min_prop)) |>
+    dplyr::summarise(all_ok = all(.data$ok), .by = "Day") |>
+    dplyr::filter(.data$all_ok) |>
+    dplyr::pull(.data$Day)
+
+  if (length(valid_days) == 0L) {
+    return(NA_real_)
+  }
+
+  return(max(valid_days))
+}
+
 build_analysis_tv <- function(tv, role_map, comparator_map, combo_arm_id) {
   role_args <- build_combo_role_args(role_map, comparator_map, combo_arm_id)
   out <- set_roles(

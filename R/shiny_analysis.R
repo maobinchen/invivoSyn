@@ -1,186 +1,20 @@
-package_tgi_bootstrap <- function(tgi_lst, method = c("Bliss", "HSA")) {
-  method <- match.arg(method)
-  roles <- tgi_lst$roles
-  boot_matrix <- as.data.frame(tgi_lst$bsTGI_r$t)
-  colnames(boot_matrix) <- c(as.character(roles$single_grps), "Combo")
-  single_matrix <- as.matrix(boot_matrix[, seq_along(roles$single_grps), drop = FALSE])
-  expected <- switch(
-    method,
-    Bliss = 100 * (1 - apply(1 - single_matrix / 100, 1, prod)),
-    HSA = apply(single_matrix, 1, max)
-  )
-  observed <- 100 * boot_matrix$Combo
-  return(tibble::tibble(
-    iteration = seq_len(nrow(boot_matrix)),
-    observed = observed,
-    expected = expected,
-    score = observed - expected
-  ))
-}
-
-extract_auc_bootstrap_values <- function(values) {
-  value_names <- names(values)
-  if (!is.null(value_names) && all(c("CI", "Synergy_score") %in% value_names)) {
-    return(list(
-      ci_value = unname(values[["CI"]]),
-      synergy_score = unname(values[["Synergy_score"]])
-    ))
-  }
-  if (length(values) >= 2L) {
-    return(list(
-      ci_value = unname(values[[1]]),
-      synergy_score = unname(values[[2]])
-    ))
-  }
-  rlang::abort("AUC bootstrap returned an unexpected result shape.")
-}
-
-package_auc_bootstrap <- function(
-    auc_lst, estimate_day, method = c("Bliss", "HSA"), boot_n = 1000L,
-    seed = 123456L) {
-  method <- match.arg(method)
-  roles <- auc_lst$roles
-  auc_mouse <- as.data.frame(auc_lst$auc_mouse)
-  set.seed(seed)
-  boot_idx <- replicate(
-    boot_n,
-    sample.int(nrow(auc_mouse), size = nrow(auc_mouse), replace = TRUE),
-    simplify = FALSE
-  )
-  boot_scores <- purrr::map_dfr(seq_along(boot_idx), function(iteration) {
-    extracted <- tryCatch({
-      values <- getFromNamespace("bs_AUC_synergy", "invivoSyn")(
-        auc_mouse = auc_mouse,
-        t = estimate_day,
-        method = method,
-        roles = roles,
-        idx = boot_idx[[iteration]]
-      )
-      extract_auc_bootstrap_values(values)
-    }, error = function(...) {
-      list(ci_value = NA_real_, synergy_score = NA_real_)
-    })
-    ci_value <- extracted$ci_value
-    synergy_score <- extracted$synergy_score
-    if (isTRUE(all.equal(ci_value, 1))) {
-      expected <- NA_real_
-      observed <- NA_real_
-    } else {
-      expected <- (synergy_score / 100) / (1 - ci_value)
-      observed <- ci_value * expected
+capture_package_figure <- function(plot_call, width = 1600, height = 800, res = 150) {
+  file <- tempfile(pattern = "invivoSyn-figure-", fileext = ".png")
+  device_open <- FALSE
+  grDevices::png(filename = file, width = width, height = height, res = res)
+  device_open <- TRUE
+  on.exit({
+    if (device_open) {
+      try(grDevices::dev.off(), silent = TRUE)
     }
-    return(tibble::tibble(
-      iteration = iteration,
-      observed = observed,
-      expected = expected,
-      score = synergy_score
-    ))
-  })
-  return(boot_scores)
-}
-
-package_auc_point_estimate <- function(auc_lst, estimate_day, method = c("Bliss", "HSA")) {
-  method <- match.arg(method)
-  auc_mouse <- as.data.frame(auc_lst$auc_mouse)
-  roles <- auc_lst$roles
-  return(tryCatch({
-    values <- getFromNamespace("bs_AUC_synergy", "invivoSyn")(
-      auc_mouse = auc_mouse,
-      t = estimate_day,
-      method = method,
-      roles = roles,
-      idx = seq_len(nrow(auc_mouse))
-    )
-    extract_auc_bootstrap_values(values)
-  }, error = function(...) {
-    list(ci_value = NA_real_, synergy_score = NA_real_)
-  }))
-}
-
-interpret_score <- function(lb, ub) {
-  if (is.na(lb) || is.na(ub)) {
-    return(NA_character_)
-  }
-  if (lb > 0) {
-    return("Synergistic")
-  }
-  if (ub < 0) {
-    return("Antagonistic")
-  }
-  return("Inconclusive")
-}
-
-summarize_tgi_result <- function(combo_arm_id, combo_treatment, method, tgi_syn, boot_scores) {
-  p_syn_name <- grep("^p\\.val\\.Synergy", names(tgi_syn), value = TRUE)[1]
-  summary <- tibble::tibble(
-    combination_arm_id = combo_arm_id,
-    combination_treatment = combo_treatment,
-    metric = "TGI",
-    method = method,
-    observed = unname(tgi_syn[["Observed TGI"]]),
-    expected = unname(tgi_syn[["Expected TGI"]]),
-    synergy_score = unname(tgi_syn[["Synergy score"]]),
-    lb = unname(tgi_syn[["ss_lb"]]),
-    ub = unname(tgi_syn[["ss_ub"]]),
-    ci_value = unname(tgi_syn[["CI"]]),
-    p_value_synergy = unname(tgi_syn[[p_syn_name]]),
-    p_value_antagonism = unname(tgi_syn[["p.val.Antagonism"]])
-  ) |>
-    dplyr::mutate(
-      interpretation = interpret_score(.data$lb, .data$ub)
-    )
-  bootstrap <- dplyr::mutate(
-    boot_scores,
-    combination_arm_id = combo_arm_id,
-    combination_treatment = combo_treatment,
-    metric = "TGI",
-    .before = 1
-  )
-  return(list(summary = summary, bootstrap = bootstrap))
-}
-
-summarize_auc_result <- function(combo_arm_id, combo_treatment, method, point_estimate, boot_scores, conf = 0.95) {
-  ci_value <- point_estimate$ci_value
-  synergy_score <- point_estimate$synergy_score
-  alpha <- (1 - conf) / 2
-  if (isTRUE(all.equal(ci_value, 1))) {
-    observed <- NA_real_
-    expected <- NA_real_
-  } else {
-    expected <- (synergy_score / 100) / (1 - ci_value)
-    observed <- ci_value * expected
-  }
-  summary <- tibble::tibble(
-    combination_arm_id = combo_arm_id,
-    combination_treatment = combo_treatment,
-    metric = "AUC",
-    method = method,
-    observed = observed,
-    expected = expected,
-    synergy_score = synergy_score,
-    lb = stats::quantile(boot_scores$score, alpha, na.rm = TRUE, names = FALSE),
-    ub = stats::quantile(boot_scores$score, 1 - alpha, na.rm = TRUE, names = FALSE),
-    ci_value = ci_value,
-    p_value_synergy = mean(boot_scores$score <= 0, na.rm = TRUE),
-    p_value_antagonism = mean(boot_scores$score >= 0, na.rm = TRUE)
-  ) |>
-    dplyr::mutate(
-      interpretation = interpret_score(.data$lb, .data$ub)
-    )
-  bootstrap <- dplyr::mutate(
-    boot_scores,
-    combination_arm_id = combo_arm_id,
-    combination_treatment = combo_treatment,
-    metric = "AUC",
-    .before = 1
-  )
-  return(list(summary = summary, bootstrap = bootstrap))
-}
-
-rank_combination_results <- function(results) {
-  return(results |>
-    dplyr::arrange(.data$metric, .data$method, dplyr::desc(.data$synergy_score)) |>
-    dplyr::mutate(rank = dplyr::row_number(), .by = c(metric, method)))
+  }, add = TRUE)
+  value <- plot_call()
+  grDevices::dev.off()
+  device_open <- FALSE
+  return(list(
+    value = value,
+    file = normalizePath(file, winslash = "/", mustWork = TRUE)
+  ))
 }
 
 analysis_snapshot_id <- function(tv, role_map, comparator_map, settings) {
@@ -190,51 +24,59 @@ analysis_snapshot_id <- function(tv, role_map, comparator_map, settings) {
 analyze_combination_with_package <- function(tv, role_map, comparator_map, combo_arm_id, settings) {
   combo_tv <- build_analysis_tv(tv, role_map, comparator_map, combo_arm_id)
   combo_treatment <- lookup_treatment(role_map, combo_arm_id)
-  if (settings$metric == "TGI") {
+
+  # Only the selected metric is calculated; switching the metric re-runs analysis.
+  if (identical(settings$metric, "TGI")) {
     tgi_lst <- getTGI(
       combo_tv,
       sel_day = settings$selected_day,
       tv_var = settings$tv_var,
       ci = settings$conf,
+      ci_type = "bca",
       n_rep = settings$boot_n
     )
-    tgi_syn <- TGI_synergy(
-      tgi_lst,
-      method = settings$method,
+    capture <- capture_package_figure(function() {
+      TGI_synergy(
+        tgi_lst,
+        method = settings$method,
+        ci = settings$conf,
+        ci_type = "bca",
+        display = TRUE,
+        save = FALSE
+      )
+    })
+    efficacy <- tgi_lst$bsTGI_df
+  } else {
+    auc_lst <- get_mAUCr(
+      combo_tv,
+      sel_day = settings$end_day,
       ci = settings$conf,
-      display = FALSE,
-      save = FALSE
+      ci_type = "bca",
+      nrep = settings$boot_n
     )
-    boot_scores <- package_tgi_bootstrap(tgi_lst, settings$method)
-    return(summarize_tgi_result(combo_arm_id, combo_treatment, settings$method, tgi_syn, boot_scores))
+    capture <- capture_package_figure(function() {
+      AUC_synergy(
+        auc_lst,
+        t = settings$auc_t,
+        method = settings$method,
+        boot_n = settings$boot_n,
+        ci = settings$conf,
+        ci_type = "bca",
+        display = TRUE,
+        save = FALSE,
+        parallel = "snow"
+      )
+    })
+    efficacy <- auc_lst$bsAUC_df
   }
-  auc_lst <- get_mAUCr(
-    combo_tv,
-    sel_day = settings$end_day,
-    ci = settings$conf,
-    nrep = settings$boot_n
-  )
-  boot_scores <- package_auc_bootstrap(
-    auc_lst,
-    estimate_day = settings$auc_t,
-    method = settings$method,
-    boot_n = settings$boot_n
-  )
-  point_estimate <- package_auc_point_estimate(
-    auc_lst,
-    estimate_day = settings$auc_t,
-    method = settings$method
-  )
-  if (is.na(point_estimate$synergy_score)) {
-    point_estimate$synergy_score <- mean(boot_scores$score, na.rm = TRUE)
-  }
-  return(summarize_auc_result(
-    combo_arm_id,
-    combo_treatment,
-    settings$method,
-    point_estimate,
-    boot_scores,
-    conf = settings$conf
+
+  return(list(
+    combination_arm_id = combo_arm_id,
+    combination_treatment = combo_treatment,
+    metric = settings$metric,
+    efficacy = efficacy,
+    synergy = capture$value,
+    figure = capture$file
   ))
 }
 
@@ -244,8 +86,9 @@ analyze_combinations <- function(tv, role_map, comparator_map, settings) {
     combos,
     ~ analyze_combination_with_package(tv, role_map, comparator_map, .x, settings)
   )
-  summaries <- purrr::map_dfr(analyses, "summary") |>
-    rank_combination_results()
-  bootstraps <- purrr::map_dfr(analyses, "bootstrap")
-  return(list(summary = summaries, bootstrap = bootstraps))
+  details <- purrr::set_names(analyses, purrr::map_chr(analyses, "combination_treatment"))
+  return(list(
+    metric = settings$metric,
+    details = details
+  ))
 }

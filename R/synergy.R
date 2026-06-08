@@ -129,9 +129,16 @@ AUC_synergy=function(auc_lst,t=21,method='Bliss',boot_n=1000,ci=0.95,
                        R=boot_n,parallel = parallel,ncpus = parallel::detectCores()-1)
   n=length(bsAUCci_r$t0)
   cis=do.call(rbind,lapply(1:n,function(i) getCI(bsAUCci_r,i,conf=ci,ci_type=ci_type)))
-  out_df=cbind(broom::tidy(bsAUCci_r),cis)
-  out_df=out_df[,-3]
-  names(out_df)=c('Metric','Value','std.err','lb','ub')
+  # Build name-aligned rather than via broom::tidy(), which drops rows for NA
+  # statistics and would then mis-align against `cis`.
+  out_df=data.frame(
+    Metric=names(bsAUCci_r$t0),
+    Value=as.numeric(bsAUCci_r$t0),
+    std.err=apply(bsAUCci_r$t,2,stats::sd,na.rm=TRUE),
+    lb=cis[,1],
+    ub=cis[,2],
+    stringsAsFactors=FALSE
+  )
   bs_df=bsAUCci_r$t %>% as.data.frame()
   ss_names=paste0(method,c(" CI"," Synergy Score"),'(invivoSyn)')
   colnames(bs_df)=ss_names

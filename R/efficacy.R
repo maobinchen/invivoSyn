@@ -56,6 +56,13 @@ getTGI=function(tv,sel_day,tv_var='DeltaTV',ref_group=NULL,ci=0.95,ci_type='perc
 #' @examples get_AUC(mouse_tv)
 get_AUC=function(df){
   df=as.data.frame(df)
+  # Preserve mouse/group identity from the unfiltered data so the returned row is
+  # well-formed even when a mouse has no usable measurement (all-NA TV).
+  mouse=unique(df$Mouse)
+  group=unique(as.character(df$Group))
+  # Drop unmeasured timepoints (e.g. arms followed for fewer days) so the AUC is
+  # integrated over the days a mouse was actually measured rather than returning NA.
+  df=df[!is.na(df$TV) & !is.na(df$Day),]
   df=df[order(df$Day),]
   day_v=df$Day
   TV_v=log(df$TV+1)
@@ -66,7 +73,7 @@ get_AUC=function(df){
     AUC=pracma::trapz(x=day_v,y=TV_v) - pracma::trapz(x=day_v,y=rep(TV_v[1],length(day_v)))
     AUC = 2*AUC/(day_span*day_span) #tumor growth rate under exponential growth model
   }
-  auc_df=data.frame('Mouse'=unique(df$Mouse),'AUC'=AUC,'Day'=day_v[n1],'Group'=unique(as.character(df$Group)))
+  auc_df=data.frame('Mouse'=mouse,'AUC'=AUC,'Day'=if(n1>0) day_v[n1] else NA_real_,'Group'=group)
   auc_df
 }
 
@@ -125,14 +132,30 @@ get_mAUCr=function(tv,sel_day=NA,ref_group=NULL,ci=0.95,ci_type='perc',nrep=1000
   if(!is.na(sel_day)) tv=tv %>% filter(Day <= sel_day)
   mouses=split(tv,tv$Mouse)
   auc_mouse=do.call(rbind,lapply(mouses,get_AUC)) %>% as.data.frame()
+  # Mice without at least two measured timepoints yield no AUC; drop them so the
+  # bootstrap and downstream summaries operate only on usable observations.
+  auc_mouse=auc_mouse %>% filter(!is.na(AUC))
   auc_mouse=auc_mouse %>% mutate(Group = factor(Group,levels=levels(tv$Group)))
+  if(!ref_group %in% as.character(auc_mouse$Group))
+    stop("Reference group '",ref_group,"' has no mouse with >=2 measured timepoints; ",
+         "cannot compute AUC. Choose an AUC end day where the reference arm has data.",
+         call.=FALSE)
+  auc_mouse=droplevels(auc_mouse)
   mAUCr_r=boot::boot(data=auc_mouse,statistic=bs_mAUCr,ref_group=ref_group,strata=auc_mouse$Group,R=nrep)
   group_n=length(mAUCr_r$t0)
   cis=do.call(rbind,lapply(1:group_n,function(i) getCI(mAUCr_r,i,conf=ci,ci_type=ci_type)))
-  bsAUC_df=cbind(broom::tidy(mAUCr_r),cis)
-  bsAUC_df=bsAUC_df[,-3]
-  names(bsAUC_df)=c('Group','mAUCr','std.err','lb','ub')
-  group_info=tv %>% select(Group,Treatment) %>% distinct()
+  # Build the summary directly from the boot object (name-aligned) rather than via
+  # broom::tidy(), which silently drops rows for NA statistics and would then break
+  # the column bind against `cis`.
+  bsAUC_df=data.frame(
+    Group=names(mAUCr_r$t0),
+    mAUCr=as.numeric(mAUCr_r$t0),
+    std.err=apply(mAUCr_r$t,2,stats::sd,na.rm=TRUE),
+    lb=cis[,1],
+    ub=cis[,2],
+    stringsAsFactors=FALSE
+  )
+  group_info=tv %>% select(Group,Treatment) %>% distinct() %>% mutate(Group=as.character(Group))
   bsAUC_df=bsAUC_df %>% left_join(group_info,by='Group') %>% select(Group,Treatment,everything())
   list(mAUCr_r=mAUCr_r,bsAUC_df=bsAUC_df,auc_mouse=auc_mouse,roles=roles)
 }

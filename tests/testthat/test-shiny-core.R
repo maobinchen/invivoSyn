@@ -91,17 +91,17 @@ test_that("multiple combinations are analyzed with package-backed TGI orchestrat
   mapping <- tidyr::crossing(combination_arm_id = combos, comparator_arm_id = singles)
   settings <- list(
     metric = "TGI", method = "Bliss", selected_day = 14, end_day = 14,
-    tv_var = "RTV", conf = 0.95, boot_n = 20L
+    auc_t = 21, tv_var = "RTV", conf = 0.95, boot_n = 20L
   )
   result <- suppressWarnings(invivoSyn:::analyze_combinations(tv, roles, mapping, settings))
-  expect_equal(nrow(result$summary), 2)
-  expect_equal(sort(result$summary$rank), 1:2)
-  expect_true(all(c(
-    "combination_arm_id", "combination_treatment", "metric", "method",
-    "observed", "expected", "synergy_score", "lb", "ub",
-    "p_value_synergy", "p_value_antagonism", "interpretation"
-  ) %in% names(result$summary)))
-  expect_true(all(c("combination_treatment", "score") %in% names(result$bootstrap)))
+  expect_equal(result$metric, "TGI")
+  expect_true(all(c("A+B low", "A+B high") %in% names(result$details)))
+  detail <- result$details[[1]]
+  expect_equal(detail$metric, "TGI")
+  expect_true(is.data.frame(detail$efficacy))
+  expect_true(is.atomic(detail$synergy))
+  expect_true(is.finite(detail$synergy[["Synergy score"]]))
+  expect_true(file.exists(detail$figure))
 })
 
 test_that("multiple combinations are analyzed with package-backed AUC orchestration", {
@@ -119,12 +119,47 @@ test_that("multiple combinations are analyzed with package-backed AUC orchestrat
   mapping <- tidyr::crossing(combination_arm_id = combos, comparator_arm_id = singles)
   settings <- list(
     metric = "AUC", method = "HSA", selected_day = 14, end_day = 14,
-    tv_var = "RTV", conf = 0.95, boot_n = 20L
+    auc_t = 21, tv_var = "RTV", conf = 0.95, boot_n = 20L
   )
   result <- suppressWarnings(invivoSyn:::analyze_combinations(tv, roles, mapping, settings))
-  expect_equal(nrow(result$summary), 2)
-  expect_true(all(result$summary$metric == "AUC"))
-  expect_true(all(result$summary$method == "HSA"))
+  expect_equal(result$metric, "AUC")
+  expect_true(all(c("A+B low", "A+B high") %in% names(result$details)))
+  detail <- result$details[[1]]
+  expect_equal(detail$metric, "AUC")
+  expect_true(is.data.frame(detail$synergy))
+  score <- detail$synergy$Value[grep("score", detail$synergy$Metric, ignore.case = TRUE)]
+  expect_true(is.finite(score[[1]]))
+  expect_true(file.exists(detail$figure))
+})
+
+test_that("AUC orchestration tolerates arms followed for fewer days (NA late timepoints)", {
+  # Mirrors inst/extdata/test.csv: the vehicle and one single agent are only
+  # measured through an early day; later timepoints are NA. Integrating AUC over
+  # "all data" must not crash get_mAUCr (regression for the data.frame row-count
+  # mismatch caused by all-NA reference AUC).
+  treatments <- c("Vehicle", "A", "B", "A+B")
+  rows <- do.call(rbind, lapply(treatments, function(trt) {
+    last_day <- if (trt %in% c("Vehicle", "A")) 14 else 28
+    days <- c(0, 7, 14, 21, 28)
+    do.call(rbind, lapply(as.character(1:4), function(m) {
+      data.frame(trt = trt, mouse = paste0(trt, m), day = days, stringsAsFactors = FALSE) |>
+        within(tv <- ifelse(day <= last_day, 100 * exp(0.07 * day) *
+          c(Vehicle = 1, A = 0.7, B = 0.65, "A+B" = 0.4)[trt] + as.numeric(m), NA_real_))
+    }))
+  }))
+  tv <- invivoSyn:::normalize_tv_long(rows, "trt", "mouse", "day", "tv")
+  roles <- invivoSyn:::suggest_arm_roles(treatments)
+  singles <- roles$arm_id[roles$role == "Single agent"]
+  combos <- roles$arm_id[roles$role == "Combination"]
+  mapping <- tidyr::crossing(combination_arm_id = combos, comparator_arm_id = singles)
+  settings <- list(
+    metric = "AUC", method = "Bliss", selected_day = 14, end_day = NA_real_,
+    auc_t = 21, tv_var = "RTV", conf = 0.95, boot_n = 30L
+  )
+  result <- suppressWarnings(invivoSyn:::analyze_combinations(tv, roles, mapping, settings))
+  detail <- result$details[[1]]
+  score <- detail$synergy$Value[grep("score", detail$synergy$Metric, ignore.case = TRUE)]
+  expect_true(is.finite(score[[1]]))
 })
 
 test_that("latest_common_day finds the last analyzable day", {
@@ -135,6 +170,36 @@ test_that("latest_common_day finds the last analyzable day", {
     TV = c(100, 150, 100, 120, 100, 110, 115)
   )
   expect_equal(invivoSyn:::latest_common_day(tv, c("Vehicle", "A", "Combo"), min_observations = 1L), 0)
+})
+
+test_that("latest_coverage_day uses baseline coverage threshold", {
+  tv <- tibble::tibble(
+    arm_id = c(
+      rep("Vehicle", 5), rep("A", 5), rep("Combo", 5),
+      "Vehicle", "A"
+    ),
+    Mouse = c("1", "2", "1", "2", "1", "1", "2", "1", "2", "1", "1", "2", "1", "2", "1", "2", "2"),
+    Day = c(0, 0, 7, 7, 14, 0, 0, 7, 7, 14, 0, 0, 7, 7, 14, 14, 14),
+    TV = seq_len(17)
+  )
+  expect_equal(invivoSyn:::latest_coverage_day(tv, c("Vehicle", "A", "Combo"), min_prop = 0.8), 7)
+})
+
+test_that("latest_coverage_day works without a Day-0 baseline and when an arm stops early", {
+  # Mirrors inst/extdata/test.csv: days start at -1 (no Day 0), and Vehicle is only
+  # measured through day 16 while Drug runs to day 32. The last day every arm has
+  # >=80% coverage is 16, not the global max (32).
+  mk <- function(arm, last_day) {
+    days <- c(-1, 2, 9, 16, 20, 32)
+    do.call(rbind, lapply(1:5, function(m) {
+      tibble::tibble(
+        arm_id = arm, Mouse = paste0(arm, m), Day = days,
+        TV = ifelse(days <= last_day, 100 + m + days, NA_real_)
+      )
+    }))
+  }
+  tv <- rbind(mk("Vehicle", 16), mk("Drug", 32), mk("Combo", 32))
+  expect_equal(invivoSyn:::latest_coverage_day(tv, c("Vehicle", "Drug", "Combo"), min_prop = 0.8), 16)
 })
 
 test_that("summary endpoint table is wide and uses mean+/-sd(n) format", {
@@ -157,8 +222,9 @@ test_that("summary endpoint table is wide and uses mean+/-sd(n) format", {
   expect_match(summary$`7`[[1]], "160\\.000\\+/-14\\.142\\(2\\)")
 })
 
-test_that("AUC bootstrap extractor supports unnamed vectors", {
-  extracted <- invivoSyn:::extract_auc_bootstrap_values(c(0.8, 12.5))
-  expect_equal(extracted$ci_value, 0.8)
-  expect_equal(extracted$synergy_score, 12.5)
+test_that("display tables preserve package-style column names", {
+  source(testthat::test_path("..", "..", "inst", "shiny", "invivoSyn", "R", "helpers.R"), local = TRUE)
+  x <- c("Observed TGI" = 50, "Expected TGI" = 40, "Synergy score" = 10)
+  out <- as_display_table(x)
+  expect_true(all(c("Observed TGI", "Expected TGI", "Synergy score") %in% names(out)))
 })

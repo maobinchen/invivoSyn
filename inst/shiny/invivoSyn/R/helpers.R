@@ -17,9 +17,20 @@ format_3 <- function(x) {
   ifelse(is.na(x), NA_character_, sprintf("%.3f", round(x, 3)))
 }
 
+is_integerish_column <- function(x) {
+  if (!is.numeric(x)) {
+    return(FALSE)
+  }
+  values <- stats::na.omit(x)
+  if (length(values) == 0) {
+    return(TRUE)
+  }
+  return(all(abs(values - round(values)) < sqrt(.Machine$double.eps)))
+}
+
 format_dt_table <- function(data, ...) {
   out <- DT::datatable(data, ...)
-  numeric_cols <- names(data)[vapply(data, is.numeric, logical(1))]
+  numeric_cols <- names(data)[vapply(data, function(x) is.numeric(x) && !is_integerish_column(x), logical(1))]
   if (length(numeric_cols) > 0) {
     out <- DT::formatRound(out, columns = numeric_cols, digits = 3)
   }
@@ -82,4 +93,17 @@ bootstrap_plot <- function(bootstrap, combination_treatment) {
     ggplot2::geom_vline(xintercept = 0, linetype = 2, color = "#B22222") +
     ggplot2::theme_minimal() +
     ggplot2::labs(x = "Synergy score", y = "Bootstrap count"))
+}
+
+as_display_table <- function(x) {
+  if (is.data.frame(x)) {
+    return(as.data.frame(x, check.names = FALSE))
+  }
+  if (is.atomic(x) && !is.null(names(x))) {
+    return(data.frame(as.list(x), check.names = FALSE))
+  }
+  if (is.list(x) && !is.null(names(x))) {
+    return(data.frame(as.list(x), check.names = FALSE))
+  }
+  return(data.frame(Value = x, check.names = FALSE))
 }

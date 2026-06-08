@@ -31,14 +31,24 @@ knitr::kable(snapshot$role_map)
 knitr::kable(snapshot$comparator_map)
 ```
 
-## Ranked Combination Summary
-
-```{r}
-knitr::kable(snapshot$result$summary, digits = 4)
-```
-
 ## Tumor Growth
 
 ```{r, fig.width=11, fig.height=7}
 print(growth_plot(snapshot$tv, "TV"))
+```
+
+## Package-native Combination Results
+
+```{r results='asis'}
+for (combo_name in names(snapshot$result$details)) {
+  detail <- snapshot$result$details[[combo_name]]
+  cat("### ", combo_name, "\n\n", sep = "")
+  cat("#### ", detail$metric, " efficacy\n\n", sep = "")
+  print(knitr::kable(detail$efficacy, digits = 3))
+  cat("\n#### ", detail$metric, " synergy\n\n", sep = "")
+  print(knitr::kable(as_display_table(detail$synergy), digits = 3))
+  cat("\n#### ", detail$metric, " package figure\n\n", sep = "")
+  print(knitr::include_graphics(detail$figure))
+  cat("\n")
+}
 ```
