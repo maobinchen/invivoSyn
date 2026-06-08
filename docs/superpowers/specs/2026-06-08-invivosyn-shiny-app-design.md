@@ -98,7 +98,7 @@ The app displays:
 The analysis sidebar contains:
 
 - Metric: TGI or AUC
-- Reference model: Bliss, HSA, or RA
+- Reference model: Bliss or HSA
 - Selected analysis day for TGI
 - AUC study end day
 - Tumor-volume variable for TGI: `DeltaTV` or `RTV`
@@ -177,7 +177,6 @@ For single-agent TGI values \(TGI_i\), expected combination TGI is:
 
 - Bliss: \(100 \times [1 - \prod_i(1 - TGI_i / 100)]\)
 - HSA: \(\max_i(TGI_i)\)
-- RA: \(\sum_i TGI_i\)
 
 The synergy score is:
 
@@ -196,8 +195,6 @@ the expected combination effect is:
 
 - Bliss: \(\prod_i s_i\)
 - HSA: \(\min_i s_i\)
-- RA: \(\sum_i(1 - s_i)\), preserving the package's existing
-  response-additivity transformation across all single agents
 
 The implementation must isolate the expected-effect calculation in a tested
 helper so model behavior is explicit and can be corrected without changing
@@ -212,6 +209,9 @@ that the combination is the third nonvehicle result.
 LMM, day-specific CombPDX CI, and global CombPDX CI will not appear in the first
 release. Their current package implementations assume exactly two single-agent
 arms and do not satisfy the approved multi-drug contract.
+
+Response Additivity (RA) will also not appear in the first release. The app
+supports only Bliss and HSA reference models.
 
 ## Results and Interpretation
 
@@ -292,7 +292,7 @@ Helper and analysis tests cover:
 - Warning generation
 - Two-, three-, and higher-order single-agent TGI calculations
 - Two-, three-, and higher-order single-agent AUC calculations
-- Bliss, HSA, and RA expected-effect helpers
+- Bliss and HSA expected-effect helpers
 - Stale-result detection
 - Report snapshot integrity
 
