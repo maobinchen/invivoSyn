@@ -45,9 +45,13 @@ upload_server <- function(id) {
     })
     parsed <- shiny::eventReactive(input$parse, {
       data <- raw()
+      shiny::req(input$format, input$treatment, input$mouse)
       fmt <- input$format
-      if (fmt == "auto") fmt <- if (nzchar(input$day) && nzchar(input$tv)) "long" else "wide"
+      if (fmt == "auto") {
+        fmt <- if (nzchar(input$day %||% "") && nzchar(input$tv %||% "")) "long" else "wide"
+      }
       if (fmt == "long") {
+        shiny::req(input$day, input$tv)
         return(normalize_tv_long(data, input$treatment, input$mouse, input$day, input$tv))
       }
       return(normalize_tv_wide(data, input$treatment, input$mouse))

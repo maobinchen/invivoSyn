@@ -44,7 +44,10 @@ if (!is.na(source_root)) {
   })
 }
 
-purrr::walk(list.files("R", pattern = "\\.R$", full.names = TRUE), source)
+purrr::walk(
+  list.files("R", pattern = "\\.R$", full.names = TRUE),
+  ~ sys.source(.x, envir = app_env)
+)
 
 ui <- bslib::page_navbar(
   title = shiny::tagList(shiny::icon("chart-line"), "invivoSyn"),

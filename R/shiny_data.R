@@ -104,7 +104,7 @@ normalize_tv_long <- function(data, treatment_col, mouse_col, day_col, tv_col) {
     dplyr::mutate(
       baseline_day = min(.data$Day, na.rm = TRUE),
       TV0 = .data$TV[match(.data$baseline_day[[1]], .data$Day)],
-      .by = c(.data$arm_id, .data$Mouse)
+      .by = c("arm_id", "Mouse")
     ) |>
     dplyr::mutate(
       RTV = dplyr::if_else(.data$TV0 == 0, NA_real_, .data$TV / .data$TV0),
@@ -112,8 +112,8 @@ normalize_tv_long <- function(data, treatment_col, mouse_col, day_col, tv_col) {
       logTV = log(.data$TV + 1)
     ) |>
     dplyr::select(
-      .data$arm_id, .data$Group, .data$Treatment, .data$Mouse, .data$Day,
-      .data$TV, .data$TV0, .data$RTV, .data$DeltaTV, .data$logTV
+      "arm_id", "Group", "Treatment", "Mouse", "Day",
+      "TV", "TV0", "RTV", "DeltaTV", "logTV"
     )
   return(out)
 }
