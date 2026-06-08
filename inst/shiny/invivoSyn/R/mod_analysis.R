@@ -59,12 +59,19 @@ analysis_server <- function(id, tv, role_map, comparator_map, validation) {
       if (!identical(input$metric, "TGI")) {
         return()
       }
-      vehicle <- role_map()$arm_id[role_map()$role == "Vehicle"][[1]]
       combos <- role_map()$arm_id[role_map()$role == "Combination"]
+      vehicles <- role_map()$arm_id[role_map()$role == "Vehicle"]
+      if (length(vehicles) != 1L || length(combos) == 0L) {
+        return()
+      }
+      vehicle <- vehicles[[1]]
       candidate_days <- purrr::map_dbl(combos, function(combo) {
         comparators <- comparator_map()$comparator_arm_id[
           comparator_map()$combination_arm_id == combo
         ]
+        if (length(comparators) == 0L) {
+          return(NA_real_)
+        }
         latest_common_day(tv(), c(vehicle, comparators, combo))
       })
       candidate_days <- candidate_days[!is.na(candidate_days)]
