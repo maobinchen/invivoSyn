@@ -2,19 +2,18 @@
 % Please edit documentation in R/read_tv.R
 \name{expand_tv}
 \alias{expand_tv}
-\title{Expand tumor volume data frame, add TV0, RTV and logTV}
+\title{Expand a long-format tumor-volume tibble with derived columns}
 \usage{
 expand_tv(tv_long)
 }
 \arguments{
-\item{tv_long}{tumor volume data frame, including Treatment, Mouse, Day and TV}
+\item{tv_long}{long-format tibble with at least \code{Group}, \code{Mouse}, \code{Day}, \code{TV}.}
 }
 \value{
-a tumor volume data frame, including TV,RTV and deltaTV
+the input tibble with \code{TV0}, \code{logTV}, \code{RTV}, \code{DeltaTV} added.
 }
 \description{
-Expand tumor volume data frame, add TV0, RTV and logTV
-}
-\examples{
-tv_long=expand_tv(tv_long)
+Adds \code{TV0} (per-mouse baseline tumor volume), \code{logTV}, \code{RTV} (relative
+tumor volume = TV / TV0), and \code{DeltaTV} (TV - TV0). Re-bases \code{Day} so
+that each mouse's first measurement is Day 0.
 }

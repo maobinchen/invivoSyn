@@ -7,7 +7,7 @@
 get_mAUCr(
   tv,
   sel_day = NA,
-  ref_group = "Group 1",
+  ref_group = NULL,
   ci = 0.95,
   ci_type = "perc",
   nrep = 1000

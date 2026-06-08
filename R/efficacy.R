@@ -6,7 +6,8 @@
 #' @param tv_var variable for TGI calculation, can be either DeltaTV or RTV (RTV: definiton of CombPDX for TGI)
 #'
 #' @return TGI statistics for each group
-bsTGI=function(tvs,tv_var='DeltaTV',ref_group="Group 1",idx){
+bsTGI=function(tvs,tv_var='DeltaTV',ref_group=NULL,idx){
+  if(is.null(ref_group)) ref_group=levels(tvs$Group)[1]
   tvs=tvs[idx,]
   ms=tapply(tvs[[tv_var]],tvs$Group,mean)
   ms1=ms[-which(names(ms)==ref_group)]/ms[ref_group]
@@ -28,7 +29,9 @@ bsTGI=function(tvs,tv_var='DeltaTV',ref_group="Group 1",idx){
 #'
 #' @examples
 #' getTGI(LS_1034,17,ci=0.9,ci_type='bca')
-getTGI=function(tv,sel_day,tv_var='DeltaTV',ref_group='Group 1',ci=0.95,ci_type='perc',n_rep=1000){
+getTGI=function(tv,sel_day,tv_var='DeltaTV',ref_group=NULL,ci=0.95,ci_type='perc',n_rep=1000){
+  roles=get_roles(tv)
+  if(is.null(ref_group)) ref_group=roles$vehicle_grp
   dayTV=subset(tv,Day==sel_day)
   rownames(dayTV)=dayTV$Mouse
   bsTGI_r=boot::boot(data=dayTV,statistic=bsTGI,tv_var=tv_var,ref_group=ref_group,strata=dayTV$Group,R=n_rep)
@@ -39,8 +42,8 @@ getTGI=function(tv,sel_day,tv_var='DeltaTV',ref_group='Group 1',ci=0.95,ci_type=
   names(bsTGI_df)=c('Group','TGI','std.err','lb','ub')
   bsTGI_df[,-1]=100*bsTGI_df[,-1]
   group_info=tv %>% select(Group,Treatment) %>% distinct()
-  bsTGI_df=bsTGI_df %>% left_join(group_info) %>% select(Group,Treatment,everything())
-  list(bsTGI_r=bsTGI_r,bsTGI_df=bsTGI_df)
+  bsTGI_df=bsTGI_df %>% left_join(group_info,by='Group') %>% select(Group,Treatment,everything())
+  list(bsTGI_r=bsTGI_r,bsTGI_df=bsTGI_df,roles=roles)
 }
 
 #' Calculate normalized AUC for tumor growth curve
@@ -91,7 +94,8 @@ mAUCr=function(df,grp,ref_grp){
 #' @param idx bootstrap index
 #'
 #' @return A vector of medianAUCRatio statistic for each group
-bs_mAUCr=function(auc_df,ref_group="Group 1",idx){
+bs_mAUCr=function(auc_df,ref_group=NULL,idx){
+  if(is.null(ref_group)) ref_group=levels(auc_df$Group)[1]
   auc_df=auc_df[idx,]
   grps=unique(auc_df$Group)
   grps=grps[grps != ref_group]
@@ -115,11 +119,13 @@ bs_mAUCr=function(auc_df,ref_group="Group 1",idx){
 #' @export
 #'
 #' @examples get_mAUCr(LS_1034,ci=0.9,ci_type='bca')
-get_mAUCr=function(tv,sel_day=NA,ref_group='Group 1',ci=0.95,ci_type='perc',nrep=1000){
+get_mAUCr=function(tv,sel_day=NA,ref_group=NULL,ci=0.95,ci_type='perc',nrep=1000){
+  roles=get_roles(tv)
+  if(is.null(ref_group)) ref_group=roles$vehicle_grp
   if(!is.na(sel_day)) tv=tv %>% filter(Day <= sel_day)
   mouses=split(tv,tv$Mouse)
   auc_mouse=do.call(rbind,lapply(mouses,get_AUC)) %>% as.data.frame()
-  auc_mouse=auc_mouse %>% mutate(Group = factor(Group))
+  auc_mouse=auc_mouse %>% mutate(Group = factor(Group,levels=levels(tv$Group)))
   mAUCr_r=boot::boot(data=auc_mouse,statistic=bs_mAUCr,ref_group=ref_group,strata=auc_mouse$Group,R=nrep)
   group_n=length(mAUCr_r$t0)
   cis=do.call(rbind,lapply(1:group_n,function(i) getCI(mAUCr_r,i,conf=ci,ci_type=ci_type)))
@@ -127,7 +133,7 @@ get_mAUCr=function(tv,sel_day=NA,ref_group='Group 1',ci=0.95,ci_type='perc',nrep
   bsAUC_df=bsAUC_df[,-3]
   names(bsAUC_df)=c('Group','mAUCr','std.err','lb','ub')
   group_info=tv %>% select(Group,Treatment) %>% distinct()
-  bsAUC_df=bsAUC_df %>% left_join(group_info) %>% select(Group,Treatment,everything())
-  list(mAUCr_r=mAUCr_r,bsAUC_df=bsAUC_df,auc_mouse=auc_mouse)
+  bsAUC_df=bsAUC_df %>% left_join(group_info,by='Group') %>% select(Group,Treatment,everything())
+  list(mAUCr_r=mAUCr_r,bsAUC_df=bsAUC_df,auc_mouse=auc_mouse,roles=roles)
 }
 

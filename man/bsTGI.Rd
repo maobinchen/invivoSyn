@@ -4,7 +4,7 @@
 \alias{bsTGI}
 \title{Calculate TGI statistic for bootstrap}
 \usage{
-bsTGI(tvs, tv_var = "DeltaTV", ref_group = "Group 1", idx)
+bsTGI(tvs, tv_var = "DeltaTV", ref_group = NULL, idx)
 }
 \arguments{
 \item{tvs}{tumor growth data of one specific day}

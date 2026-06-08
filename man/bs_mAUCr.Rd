@@ -4,7 +4,7 @@
 \alias{bs_mAUCr}
 \title{Calculate medianAUCRatio statistic for bootstrap}
 \usage{
-bs_mAUCr(auc_df, ref_group = "Group 1", idx)
+bs_mAUCr(auc_df, ref_group = NULL, idx)
 }
 \arguments{
 \item{auc_df}{AUC data frame for each mouse}

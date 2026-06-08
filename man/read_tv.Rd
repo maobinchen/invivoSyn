@@ -2,21 +2,70 @@
 % Please edit documentation in R/read_tv.R
 \name{read_tv}
 \alias{read_tv}
-\title{read_tv}
+\title{Read tumor-volume data from a wide-format CSV}
 \usage{
-read_tv(file)
+read_tv(
+  file,
+  treatment_col = "Treatment",
+  mouse_col = "Mouse",
+  vehicle = NULL,
+  singles = NULL,
+  combo = NULL,
+  roles = NULL,
+  drug1 = NULL,
+  drug2 = NULL
+)
 }
 \arguments{
-\item{file}{the path of input file in a wide format, should have Treatment, Mouse and days in numeric number,
-treatment should be in the order of vehicle,group 1, group 2, and combo}
+\item{file}{path to the input CSV (wide format: one column per day).}
+
+\item{treatment_col}{name of the treatment column. Case-insensitive
+matches against \code{"Treatment"}, \code{"Group"}, \code{"Trt"} are accepted.}
+
+\item{mouse_col}{name of the mouse-identifier column. Case-insensitive
+matches against \code{"Mouse"}, \code{"Subject"}, \code{"ID"}, \code{"Animal"} are accepted.}
+
+\item{vehicle}{treatment name to be mapped to \code{"Group 1"}.}
+
+\item{singles}{character vector of single-agent treatment names, in the
+order they should appear as \code{"Group 2"}, \code{"Group 3"}, ... Must have
+length >= 2.}
+
+\item{combo}{treatment name for the N-drug combination arm, mapped to
+the last group label.}
+
+\item{roles}{alternatively, a list \code{list(vehicle = ..., singles = ..., combo = ...)} supplying all three at once.}
+
+\item{drug1, drug2}{deprecated 2-drug shorthand; use \code{singles} instead.}
 }
 \value{
-a tumor volume data frame, including TV,RTV and deltaTV
+a long-format tibble with columns \code{Group}, \code{Treatment}, \code{Mouse},
+\code{Day}, \code{TV}, \code{TV0}, \code{RTV}, \code{DeltaTV}, \code{logTV}. The fully-resolved roles
+list is attached as \code{attr(.,"roles")}.
 }
 \description{
-read_tv
+Reads a CSV in which each row is one mouse and each numeric column is
+tumor volume on a given day. Treatments are mapped to canonical group
+labels ("Group 1", ...) either positionally (legacy behavior) or by
+supplying explicit role arguments.
 }
 \examples{
-library(SynergyInVivo)
-read_tv(system.file("extdata","test.csv",package="SynergyInVivo"))
+\dontrun{
+# Legacy positional layout (vehicle first, combo last):
+tv <- read_tv(system.file("extdata", "test.csv", package = "invivoSyn"))
+
+# Explicit role mapping (recommended; row order in the CSV no longer matters):
+tv <- read_tv(
+  system.file("extdata", "test.csv", package = "invivoSyn"),
+  vehicle = "Vehicle",
+  singles = c("Irinotecan", "Rabusertib"),
+  combo   = "Irinotecan+Rabusertib"
+)
+
+# Three-drug combination:
+# tv <- read_tv("triple.csv",
+#               vehicle = "PBS",
+#               singles = c("A", "B", "C"),
+#               combo   = "A+B+C")
+}
 }

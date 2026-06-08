@@ -4,7 +4,7 @@
 \alias{bs_AUC_synergy}
 \title{AUC based synergy calculation for bootstrap}
 \usage{
-bs_AUC_synergy(auc_mouse, t = 21, method = "Bliss", idx)
+bs_AUC_synergy(auc_mouse, t = 21, method = "Bliss", roles = NULL, idx)
 }
 \arguments{
 \item{auc_mouse}{auc dataframe for each mouse}
@@ -12,6 +12,8 @@ bs_AUC_synergy(auc_mouse, t = 21, method = "Bliss", idx)
 \item{t}{date to estimate survival (default 21 days)}
 
 \item{method}{method for synergy calculation, can be Bliss,HSA or RA}
+
+\item{roles}{roles list (output of \code{\link[=get_roles]{get_roles()}})}
 
 \item{idx}{bootstrap index}
 }
