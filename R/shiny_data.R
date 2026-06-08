@@ -38,6 +38,16 @@ suggest_arm_roles <- function(treatments) {
   ))
 }
 
+extract_arm_tokens <- function(label) {
+  cleaned <- tolower(label)
+  cleaned <- gsub("^group\\s*[0-9]+\\s*[,._ -]*", "", cleaned)
+  cleaned <- gsub("[()]", " ", cleaned)
+  cleaned <- gsub("[^a-z0-9]+", " ", cleaned)
+  tokens <- unlist(strsplit(cleaned, "\\s+"))
+  tokens <- tokens[nzchar(tokens)]
+  return(tokens)
+}
+
 build_comparator_map <- function(role_map, comparator_map) {
   combinations <- role_map |>
     dplyr::filter(.data$role == "Combination") |>
@@ -68,10 +78,13 @@ suggest_comparator_map <- function(role_map) {
     dplyr::filter(.data$role == "Combination")
   suggested <- purrr::map_dfr(seq_len(nrow(combinations)), function(i) {
     combo <- combinations[i, ]
-    combo_name <- tolower(combo$Treatment)
+    combo_tokens <- extract_arm_tokens(combo$Treatment)
     matched <- singles$arm_id[vapply(
-      tolower(singles$Treatment),
-      function(single_name) grepl(single_name, combo_name, fixed = TRUE),
+      singles$Treatment,
+      function(single_name) {
+        single_tokens <- extract_arm_tokens(single_name)
+        any(single_tokens %in% combo_tokens)
+      },
       logical(1)
     )]
     return(tibble::tibble(
@@ -80,6 +93,21 @@ suggest_comparator_map <- function(role_map) {
     ))
   })
   return(suggested)
+}
+
+latest_common_day <- function(tv, arm_ids, min_observations = 2L) {
+  counts <- tv |>
+    dplyr::filter(.data$arm_id %in% arm_ids, !is.na(.data$TV)) |>
+    dplyr::count(.data$arm_id, .data$Day, name = "n")
+  valid_days <- counts |>
+    dplyr::filter(.data$n >= min_observations) |>
+    dplyr::summarise(n_arms = dplyr::n_distinct(.data$arm_id), .by = Day) |>
+    dplyr::filter(.data$n_arms == length(unique(arm_ids))) |>
+    dplyr::arrange(.data$Day)
+  if (nrow(valid_days) == 0) {
+    return(NA_real_)
+  }
+  return(max(valid_days$Day))
 }
 
 normalize_tv_long <- function(data, treatment_col, mouse_col, day_col, tv_col) {
@@ -104,7 +132,7 @@ normalize_tv_long <- function(data, treatment_col, mouse_col, day_col, tv_col) {
     dplyr::mutate(
       baseline_day = min(.data$Day, na.rm = TRUE),
       TV0 = .data$TV[match(.data$baseline_day[[1]], .data$Day)],
-      .by = c("arm_id", "Mouse")
+      .by = c(arm_id, Mouse)
     ) |>
     dplyr::mutate(
       RTV = dplyr::if_else(.data$TV0 == 0, NA_real_, .data$TV / .data$TV0),

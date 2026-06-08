@@ -32,8 +32,13 @@ analysis_server <- function(id, tv, role_map, comparator_map, validation) {
       boot_n = as.integer(input$boot_n)
     ))
     current_id <- shiny::reactive(analysis_snapshot_id(tv(), role_map(), comparator_map(), settings()))
+    analysis_validation <- shiny::reactive({
+      day_value <- if (identical(input$metric, "TGI")) input$selected_day else NULL
+      validate_invivosyn_experiment(tv(), role_map(), comparator_map(), day_value)
+    })
     snapshot <- shiny::eventReactive(input$run, {
-      shiny::validate(shiny::need(validation()$valid, "Resolve validation errors before analysis."))
+      shiny::validate(shiny::need(validation()$valid, "Resolve review validation errors before analysis."))
+      shiny::validate(shiny::need(analysis_validation()$valid, "Selected analysis day is not valid for all required arms."))
       shiny::withProgress(message = "Running Combination analyses", value = 0.2, {
         result <- analyze_combinations(tv(), role_map(), comparator_map(), settings())
         shiny::incProgress(0.7)
@@ -45,14 +50,42 @@ analysis_server <- function(id, tv, role_map, comparator_map, validation) {
     })
     stale <- shiny::reactive(!is.null(snapshot()) && !identical(snapshot()$id, current_id()))
     output$state <- shiny::renderText(if (stale()) "Results are stale. Run analysis again." else "Results match current inputs.")
-    output$summary <- DT::renderDT(DT::datatable(snapshot()$result$summary, options = list(scrollX = TRUE)))
+    output$summary <- DT::renderDT({
+      shiny::req(snapshot())
+      DT::datatable(snapshot()$result$summary, options = list(scrollX = TRUE))
+    })
     shiny::observe({
+      req(tv(), role_map(), comparator_map())
+      if (!identical(input$metric, "TGI")) {
+        return()
+      }
+      vehicle <- role_map()$arm_id[role_map()$role == "Vehicle"][[1]]
+      combos <- role_map()$arm_id[role_map()$role == "Combination"]
+      candidate_days <- purrr::map_dbl(combos, function(combo) {
+        comparators <- comparator_map()$comparator_arm_id[
+          comparator_map()$combination_arm_id == combo
+        ]
+        latest_common_day(tv(), c(vehicle, comparators, combo))
+      })
+      candidate_days <- candidate_days[!is.na(candidate_days)]
+      if (length(candidate_days) > 0) {
+        shiny::updateNumericInput(session, "selected_day", value = min(candidate_days))
+      }
+    })
+    shiny::observe({
+      shiny::req(snapshot())
       result <- snapshot()$result$summary
       shiny::updateSelectInput(session, "combo", choices = result$combination_arm_id)
     })
-    detail <- shiny::reactive(dplyr::filter(snapshot()$result$summary, .data$combination_arm_id == input$combo))
+    detail <- shiny::reactive({
+      shiny::req(snapshot(), input$combo)
+      dplyr::filter(snapshot()$result$summary, .data$combination_arm_id == input$combo)
+    })
     output$detail <- DT::renderDT(DT::datatable(detail()))
-    output$bootstrap <- plotly::renderPlotly(plotly::ggplotly(bootstrap_plot(snapshot()$result$bootstrap, input$combo)))
+    output$bootstrap <- plotly::renderPlotly({
+      shiny::req(snapshot(), input$combo)
+      plotly::ggplotly(bootstrap_plot(snapshot()$result$bootstrap, input$combo))
+    })
     return(list(snapshot = snapshot, stale = stale))
   })
 }

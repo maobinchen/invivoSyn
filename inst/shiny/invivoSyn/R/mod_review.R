@@ -19,10 +19,10 @@ review_ui <- function(id) {
   ))
 }
 
-review_server <- function(id, tv, role_map, comparator_map, selected_day) {
+review_server <- function(id, tv, role_map, comparator_map) {
   shiny::moduleServer(id, function(input, output, session) {
     validation <- shiny::reactive(validate_invivosyn_experiment(
-      tv(), role_map(), comparator_map(), selected_day()
+      tv(), role_map(), comparator_map(), NULL
     ))
     output$n_arms <- shiny::renderText(dplyr::n_distinct(tv()$arm_id))
     output$n_combos <- shiny::renderText(sum(role_map()$role == "Combination"))

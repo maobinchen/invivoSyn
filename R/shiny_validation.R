@@ -39,7 +39,7 @@ validate_invivosyn_experiment <- function(
   baseline_missing <- tv |>
     dplyr::summarise(
       missing = all(is.na(.data$TV0)),
-      .by = c(.data$arm_id, .data$Mouse)
+      .by = c(arm_id, Mouse)
     ) |>
     dplyr::filter(.data$missing)
   if (nrow(baseline_missing) > 0) add_error("Every mouse must have a nonmissing baseline measurement.")

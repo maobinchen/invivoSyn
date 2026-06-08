@@ -48,7 +48,7 @@ analyze_tgi_combination <- function(
 
   score_once <- function(x) {
     means <- x |>
-      dplyr::summarise(value = mean(.data[[tv_var]]), .by = .data$arm_id)
+      dplyr::summarise(value = mean(.data[[tv_var]]), .by = arm_id)
     vehicle <- means$value[match(vehicle_arm, means$arm_id)]
     tgi <- 100 * (1 - means$value / vehicle)
     names(tgi) <- means$arm_id
@@ -107,7 +107,7 @@ analyze_auc_combination <- function(
 
   score_once <- function(x) {
     means <- x |>
-      dplyr::summarise(value = mean(.data$AUC), .by = .data$arm_id)
+      dplyr::summarise(value = mean(.data$AUC), .by = arm_id)
     vehicle <- means$value[match(vehicle_arm, means$arm_id)]
     effects <- exp((means$value - vehicle) * end_day)
     names(effects) <- means$arm_id
@@ -136,7 +136,7 @@ analyze_auc_combination <- function(
 rank_combination_results <- function(results) {
   return(results |>
     dplyr::arrange(.data$metric, .data$method, dplyr::desc(.data$synergy_score)) |>
-    dplyr::mutate(rank = dplyr::row_number(), .by = c(.data$metric, .data$method)))
+    dplyr::mutate(rank = dplyr::row_number(), .by = c(metric, method)))
 }
 
 analysis_snapshot_id <- function(tv, role_map, comparator_map, settings) {

@@ -23,6 +23,17 @@ test_that("comparator suggestions use combination names", {
   expect_equal(nrow(mapping), 2)
 })
 
+test_that("comparator suggestions ignore group prefixes", {
+  roles <- invivoSyn:::suggest_arm_roles(c(
+    "Group 01,Vehicle",
+    "Group 04,TNO155",
+    "Group 05,Trametinib",
+    "Group 06,TNO155+Trametinib"
+  ))
+  mapping <- invivoSyn:::suggest_comparator_map(roles)
+  expect_equal(sort(mapping$comparator_arm_id), sort(c("Group.04.TNO155", "Group.05.Trametinib")))
+})
+
 test_that("validation accepts exact mappings for multiple combinations", {
   tv <- invivoSyn:::normalize_tv_long(
     data.frame(
@@ -67,4 +78,14 @@ test_that("multiple combinations are analyzed independently and ranked", {
   auc_result <- invivoSyn:::analyze_combinations(tv, roles, mapping, settings)
   expect_equal(nrow(auc_result$summary), 2)
   expect_equal(sort(auc_result$summary$rank), 1:2)
+})
+
+test_that("latest_common_day finds the last analyzable day", {
+  tv <- tibble::tibble(
+    arm_id = c("Vehicle", "Vehicle", "A", "A", "Combo", "Combo", "Combo"),
+    Mouse = c("1", "1", "1", "1", "1", "2", "1"),
+    Day = c(0, 14, 0, 14, 0, 0, 7),
+    TV = c(100, 150, 100, 120, 100, 110, 115)
+  )
+  expect_equal(invivoSyn:::latest_common_day(tv, c("Vehicle", "A", "Combo"), min_observations = 1L), 0)
 })
