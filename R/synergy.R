@@ -10,14 +10,17 @@
 #' @param method method for synergy calculation, can be Bliss,HSA or RA
 #' @param display whether or not display figure
 #' @param file if save is TRUE, the name of output file
+#' @param width width (in inches) of the saved figure
+#' @param height height (in inches) of the saved figure
 #'
-#' @return Result of synergy calculation
+#' @return a data frame of synergy scores (CI and Synergy Score) and their
+#'   bootstrap confidence intervals, in the same format as [AUC_synergy()]
 #' @export
 #'
 #' @examples
 #' TGI_lst=getTGI(LS_1034,17)
 #' bliss_synergy_TGI=TGI_synergy(TGI_lst)
-TGI_synergy=function(TGI_lst,method='Bliss',ci=0.95,ci_type='perc',display=TRUE,save=TRUE,file="TGI_synergy"){
+TGI_synergy=function(TGI_lst,method='Bliss',ci=0.95,ci_type='perc',display=TRUE,save=TRUE,file="TGI_synergy",width=16,height=8){
   bsTGI_df=TGI_lst$bsTGI_df
   roles=TGI_lst$roles
   if(is.null(roles)) stop("TGI_lst missing `roles`; re-run getTGI() on a tv produced by read_tv().")
@@ -38,8 +41,9 @@ TGI_synergy=function(TGI_lst,method='Bliss',ci=0.95,ci_type='perc',display=TRUE,
     geom_errorbar(aes(ymin=TGI, ymax=TGI+std.err), width=.2,size=1,
                   position=position_dodge(.9))+xlab("Treatment")+ylab("Inhibition(%)")+
     geom_hline(yintercept = expected_TGI,color='red',linetype=2)+
-    geom_text(aes(x=-Inf,y=expected_TGI+2),label=paste0('Expeted inhibition by ',method),vjust=0,hjust=0,size=rel(1.2))+
-    theme_Publication()
+    geom_text(aes(x=-Inf,y=expected_TGI+2),label=paste0('Expected inhibition by ',method),vjust=0,hjust=0,size=7)+
+    theme_Publication()+
+    theme(axis.text.x=element_text(angle=15,hjust=1))
 
   bsTGI_all=TGI_lst$bsTGI_r$t
   bs_cols=c(as.character(roles$single_grps),'Combo')
@@ -53,6 +57,8 @@ TGI_synergy=function(TGI_lst,method='Bliss',ci=0.95,ci_type='perc',display=TRUE,
   bsTGI_all$expected_TGI=expected_TGI_bs
   bsTGI_all$Synergy_score=bsTGI_all$Combo-bsTGI_all$expected_TGI
   bsTGI_all=bsTGI_all*100
+  # CI (log ratio) is scale-invariant, so it is computed after the *100 rescale.
+  bsTGI_all$CI=log(bsTGI_all$Combo/bsTGI_all$expected_TGI)
   pval_syn=round(1-sum(bsTGI_all$Combo>bsTGI_all$expected_TGI)/nrow(bsTGI_all),4)
   pval_anta=round(1-sum(bsTGI_all$Combo<bsTGI_all$expected_TGI)/nrow(bsTGI_all),4)
   p2=bsTGI_all %>% ggplot()+aes(expected_TGI,Combo)+geom_point()+xlab("Expected TGI")+ylab("Observed Combo TGI")+
@@ -60,14 +66,29 @@ TGI_synergy=function(TGI_lst,method='Bliss',ci=0.95,ci_type='perc',display=TRUE,
     theme_Publication()
   figure=ggpubr::ggarrange(p1,p2,labels=c("A","B"),ncol=2)
   if(display) print(figure)
-  if(save) ggsave(paste0(file,'.png'),width=16,height=8,dpi=300)
+  if(save) ggsave(paste0(file,'.png'),width=width,height=height,dpi=300)
 
+  # Bootstrap confidence intervals for both the synergy score and the CI.
   bsTGI_r=TGI_lst$bsTGI_r
   bsTGI_r$t=as.matrix(bsTGI_all)
-  bsTGI_r$t0=c(TGI_lst$bsTGI_df$TGI,expected_TGI,synergy_score)
-  ss_ci=getCI(bsTGI_r,c(length(bsTGI_r$t0),length(bsTGI_r$t0)),conf=ci,ci_type=ci_type)
-  c('Expected TGI'=expected_TGI,'Observed TGI'=combo_tgi,'p.val.Synergy)'=pval_syn,'p.val.Antagonism'=pval_anta,'CI'=CI,
-    "Synergy score"=synergy_score,'ss_lb'=ss_ci[1],'ss_ub'=ss_ci[2])
+  bsTGI_r$t0=c(TGI_lst$bsTGI_df$TGI,expected_TGI,synergy_score,CI)
+  ncol_t=ncol(bsTGI_r$t)
+  ss_idx=ncol_t-1L  # Synergy_score column
+  ci_idx=ncol_t     # CI column
+  ss_ci=getCI(bsTGI_r,ss_idx,conf=ci,ci_type=ci_type)
+  ci_ci=getCI(bsTGI_r,ci_idx,conf=ci,ci_type=ci_type)
+  # Mirror AUC_synergy()'s output: one row per metric (CI, Synergy Score).
+  out_df=data.frame(
+    Metric=paste0(method,c(" CI"," Synergy Score"),'(invivoSyn)'),
+    Value=c(CI,synergy_score),
+    std.err=c(stats::sd(bsTGI_all$CI,na.rm=TRUE),stats::sd(bsTGI_all$Synergy_score,na.rm=TRUE)),
+    lb=c(ci_ci[1],ss_ci[1]),
+    ub=c(ci_ci[2],ss_ci[2]),
+    stringsAsFactors=FALSE
+  )
+  out_df=bind_cols(out_df,data.frame('p.val.Synergy'=c(pval_syn,pval_syn),
+                                     'p.val.Antagonism'=c(pval_anta,pval_anta)))
+  out_df
 }
 
 

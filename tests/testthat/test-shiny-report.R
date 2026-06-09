@@ -29,7 +29,12 @@ test_that("report template renders from an immutable snapshot", {
           combination_treatment = "A+B",
           metric = "TGI",
           efficacy = tibble::tibble(Group = c("Group 1", "Group 2"), Treatment = c("Vehicle", "A+B"), TGI = c(0, 60), std.err = c(0, 5), lb = c(0, 45), ub = c(0, 70)),
-          synergy = c("Expected TGI" = 50, "Observed TGI" = 60, "Synergy score" = 10, "ss_lb" = 2, "ss_ub" = 18, "CI" = 1.2, "p.val.Synergy)" = 0.01, "p.val.Antagonism" = 0.99),
+          synergy = data.frame(
+            Metric = c("Bliss CI(invivoSyn)", "Bliss Synergy Score(invivoSyn)"),
+            Value = c(0.18, 10), std.err = c(0.05, 4), lb = c(0.08, 2), ub = c(0.28, 18),
+            p.val.Synergy = c(0.01, 0.01), p.val.Antagonism = c(0.99, 0.99),
+            check.names = FALSE, stringsAsFactors = FALSE
+          ),
           figure = normalizePath(tgi_png, winslash = "/", mustWork = TRUE)
         )
       )
