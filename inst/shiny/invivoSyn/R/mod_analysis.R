@@ -12,21 +12,25 @@ analysis_ui <- function(id) {
     shiny::actionButton(ns("run"), "Run Analysis", class = "btn-primary w-100"),
     shiny::textOutput(ns("state"))
   )
+  results_card <- bslib::card(
+    full_screen = TRUE,
+    bslib::card_header(shiny::textOutput(ns("results_header"))),
+    shiny::selectInput(ns("combo"), "Combination", choices = NULL),
+    bslib::navset_card_tab(
+      bslib::nav_panel("Efficacy", htmltools::div(style = "height:100%; overflow:auto;", DT::DTOutput(ns("efficacy")))),
+      bslib::nav_panel("Synergy", htmltools::div(style = "height:100%; overflow:auto;", DT::DTOutput(ns("synergy"))))
+    )
+  )
+  figure_card <- bslib::card(
+    full_screen = TRUE,
+    bslib::card_header("Package bootstrap figure"),
+    shiny::imageOutput(ns("bootstrap"), height = "100%")
+  )
   return(bslib::layout_sidebar(
     sidebar = sidebar,
-    bslib::card(
-      full_screen = TRUE,
-      bslib::card_header(shiny::textOutput(ns("results_header"))),
-      shiny::selectInput(ns("combo"), "Combination", choices = NULL),
-      bslib::navset_card_tab(
-        bslib::nav_panel("Efficacy", DT::DTOutput(ns("efficacy"))),
-        bslib::nav_panel("Synergy", DT::DTOutput(ns("synergy")))
-      )
-    ),
-    bslib::card(
-      full_screen = TRUE,
-      bslib::card_header("Package bootstrap figure"),
-      shiny::imageOutput(ns("bootstrap"), height = "520px")
+    split_container(
+      results_card, figure_card,
+      direction = "vertical", sizes = c(3, 2), height = "calc(100vh - 7rem)"
     )
   ))
 }

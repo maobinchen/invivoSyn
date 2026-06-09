@@ -102,6 +102,8 @@ test_that("multiple combinations are analyzed with package-backed TGI orchestrat
   expect_true(is.atomic(detail$synergy))
   expect_true(is.finite(detail$synergy[["Synergy score"]]))
   expect_true(file.exists(detail$figure))
+  expect_match(detail$figure, "[.]png$")
+  expect_gt(file.size(detail$figure), 0)
 })
 
 test_that("multiple combinations are analyzed with package-backed AUC orchestration", {
@@ -130,6 +132,8 @@ test_that("multiple combinations are analyzed with package-backed AUC orchestrat
   score <- detail$synergy$Value[grep("score", detail$synergy$Metric, ignore.case = TRUE)]
   expect_true(is.finite(score[[1]]))
   expect_true(file.exists(detail$figure))
+  expect_match(detail$figure, "[.]png$")
+  expect_gt(file.size(detail$figure), 0)
 })
 
 test_that("AUC orchestration tolerates arms followed for fewer days (NA late timepoints)", {
@@ -183,6 +187,17 @@ test_that("latest_coverage_day uses baseline coverage threshold", {
     TV = seq_len(17)
   )
   expect_equal(invivoSyn:::latest_coverage_day(tv, c("Vehicle", "A", "Combo"), min_prop = 0.8), 7)
+})
+
+test_that("bundled example datasets resolve and normalize", {
+  for (f in c("test.csv", "SW837.csv", "LS_1034.csv")) {
+    path <- system.file("extdata", f, package = "invivoSyn")
+    expect_true(nzchar(path), info = f)
+    raw <- utils::read.csv(path, check.names = FALSE)
+    tv <- invivoSyn:::normalize_tv_wide(raw, "Treatment", "Mouse")
+    expect_true(all(c("arm_id", "Treatment", "Mouse", "Day", "TV") %in% names(tv)), info = f)
+    expect_gte(dplyr::n_distinct(tv$Treatment), 4L)
+  }
 })
 
 test_that("latest_coverage_day works without a Day-0 baseline and when an arm stops early", {

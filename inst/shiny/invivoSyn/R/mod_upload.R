@@ -1,27 +1,52 @@
 upload_ui <- function(id) {
   ns <- shiny::NS(id)
-  return(bslib::layout_columns(
-    col_widths = c(4, 8),
-    bslib::card(
-      bslib::card_header("Upload and column mapping"),
-      shiny::fileInput(ns("file"), "Tumor-volume data", accept = c(".csv", ".xls", ".xlsx")),
-      shiny::uiOutput(ns("sheet_ui")),
-      shiny::radioButtons(ns("format"), "Input format", c("Auto" = "auto", "Wide" = "wide", "Long" = "long")),
-      shiny::uiOutput(ns("mapping_ui")),
-      shiny::actionButton(ns("parse"), "Parse data", class = "btn-primary"),
-      shiny::verbatimTextOutput(ns("status"))
-    ),
-    bslib::card(
-      full_screen = TRUE,
-      bslib::card_header("Normalized preview"),
-      DT::DTOutput(ns("preview"))
-    )
-  ))
+  mapping_card <- bslib::card(
+    full_screen = TRUE,
+    bslib::card_header("Upload and column mapping"),
+    shiny::fileInput(ns("file"), "Tumor-volume data", accept = c(".csv", ".xls", ".xlsx")),
+    shiny::uiOutput(ns("sheet_ui")),
+    shiny::selectInput(ns("example"), "Or load an example dataset", c(
+      "Choose…" = "",
+      "Combination demo (test.csv)" = "test.csv",
+      "SW837" = "SW837.csv",
+      "LS_1034" = "LS_1034.csv"
+    )),
+    shiny::actionButton(ns("load_example"), "Load example", class = "btn-outline-primary mb-2"),
+    shiny::radioButtons(ns("format"), "Input format", c("Auto" = "auto", "Wide" = "wide", "Long" = "long")),
+    shiny::uiOutput(ns("mapping_ui")),
+    shiny::actionButton(ns("parse"), "Parse data", class = "btn-primary"),
+    shiny::verbatimTextOutput(ns("status"))
+  )
+  preview_card <- bslib::card(
+    full_screen = TRUE,
+    bslib::card_header("Normalized preview"),
+    DT::DTOutput(ns("preview"))
+  )
+  return(split_container(mapping_card, preview_card, sizes = c(4, 8)))
 }
 
 upload_server <- function(id) {
   shiny::moduleServer(id, function(input, output, session) {
+    # Data source is either an uploaded file or a bundled example dataset.
+    source_rv <- shiny::reactiveVal(NULL)
+    parse_trigger <- shiny::reactiveVal(0L)
+
+    shiny::observeEvent(input$file, source_rv(list(type = "upload")))
+    shiny::observeEvent(input$load_example, {
+      shiny::req(nzchar(input$example %||% ""))
+      path <- system.file("extdata", input$example, package = "invivoSyn")
+      shiny::validate(shiny::need(nzchar(path), "Example dataset not found."))
+      source_rv(list(type = "example", path = path, name = input$example))
+      parse_trigger(parse_trigger() + 1L) # examples load + auto-parse
+    })
+    shiny::observeEvent(input$parse, parse_trigger(parse_trigger() + 1L))
+
     raw <- shiny::reactive({
+      src <- source_rv()
+      shiny::req(src)
+      if (identical(src$type, "example")) {
+        return(utils::read.csv(src$path, check.names = FALSE))
+      }
       shiny::req(input$file)
       read_uploaded_table(input$file, input$sheet)
     })
@@ -43,24 +68,47 @@ upload_server <- function(id) {
         shiny::selectInput(session$ns("tv"), "Tumor-volume column (long format)", c("Not used" = "", choices), suggestion$tv)
       )
     })
-    parsed <- shiny::eventReactive(input$parse, {
+    parsed <- shiny::eventReactive(parse_trigger(), {
       data <- raw()
-      shiny::req(input$format, input$treatment, input$mouse)
-      fmt <- input$format
+      src <- source_rv()
+      # Examples auto-parse before the mapping inputs settle, so derive columns
+      # from the data itself; uploads use the user-chosen mapping.
+      if (identical(src$type, "example")) {
+        sg <- suggest_tv_columns(data)
+        trt <- sg$treatment
+        mse <- sg$mouse
+        day <- sg$day
+        tvv <- sg$tv
+        fmt <- "auto"
+      } else {
+        shiny::req(input$treatment, input$mouse)
+        trt <- input$treatment
+        mse <- input$mouse
+        day <- input$day
+        tvv <- input$tv
+        fmt <- input$format %||% "auto"
+      }
+      # suggest_tv_columns() can return NA for absent day/tv columns (wide data);
+      # treat NA/NULL as "not used" so the format test is never NA.
+      has_col <- function(x) !is.null(x) && !is.na(x) && nzchar(x)
       if (fmt == "auto") {
-        fmt <- if (nzchar(input$day %||% "") && nzchar(input$tv %||% "")) "long" else "wide"
+        fmt <- if (has_col(day) && has_col(tvv)) "long" else "wide"
       }
       if (fmt == "long") {
-        shiny::req(input$day, input$tv)
-        return(normalize_tv_long(data, input$treatment, input$mouse, input$day, input$tv))
+        shiny::req(day, tvv)
+        return(normalize_tv_long(data, trt, mse, day, tvv))
       }
-      return(normalize_tv_wide(data, input$treatment, input$mouse))
+      return(normalize_tv_wide(data, trt, mse))
     })
     output$preview <- DT::renderDT(format_dt_table(parsed(), options = list(scrollX = TRUE)))
     output$status <- shiny::renderText({
       data <- parsed()
       paste(nrow(data), "normalized observations across", dplyr::n_distinct(data$Treatment), "arms.")
     })
-    return(list(tv = parsed, filename = shiny::reactive(input$file$name)))
+    filename <- shiny::reactive({
+      src <- source_rv()
+      if (!is.null(src) && identical(src$type, "example")) src$name else input$file$name
+    })
+    return(list(tv = parsed, filename = filename))
   })
 }

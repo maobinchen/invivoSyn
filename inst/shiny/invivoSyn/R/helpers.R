@@ -13,6 +13,83 @@ read_uploaded_table <- function(file_info, sheet = NULL) {
   if (is.null(x)) y else x
 }
 
+# Flexbox split with draggable gutters between panes (handled by the splitter JS in
+# app.R). `sizes` are flex-grow weights for the initial split; `direction` is
+# "horizontal" (drag width) or "vertical" (drag height; supply `height`).
+split_container <- function(..., direction = "horizontal", sizes = NULL, height = NULL) {
+  panes <- list(...)
+  n <- length(panes)
+  if (is.null(sizes)) sizes <- rep(1, n)
+  kids <- list()
+  for (i in seq_len(n)) {
+    kids[[length(kids) + 1]] <- htmltools::div(
+      class = "split-pane",
+      style = sprintf("flex: %s 1 0; overflow: auto;", sizes[[i]]),
+      panes[[i]]
+    )
+    if (i < n) {
+      kids[[length(kids) + 1]] <- htmltools::div(class = "split-gutter")
+    }
+  }
+  htmltools::tags$div(
+    class = paste("split-container", paste0("split-", direction)),
+    style = if (!is.null(height)) sprintf("height: %s;", height) else NULL,
+    kids
+  )
+}
+
+# Wrap content in a user-resizable block. Kept out of bslib's fill flow (place it
+# inside card_body(fillable = FALSE)) so its explicit height holds and the native
+# CSS resize grip works.
+resizable_frame <- function(..., height = "440px") {
+  htmltools::div(
+    class = "resizable-frame",
+    style = sprintf(
+      "resize: both; overflow: auto; height: %s; min-height: 180px; width: 100%%;",
+      height
+    ),
+    ...
+  )
+}
+
+# Stage-navigation button: a full-width footer action. Solid primary when `ready`;
+# otherwise a dashed, dimmed outline (reads as a locked next step, not a dead slab)
+# with a helper line. Non-clickable via the native `disabled` attribute (no shinyjs).
+next_button <- function(id, label, ready) {
+  btn <- shiny::actionButton(
+    id, label,
+    class = if (isTRUE(ready)) "btn-primary btn-lg w-100" else "btn-outline-secondary btn-lg w-100 disabled",
+    icon = shiny::icon("arrow-right")
+  )
+  hint <- NULL
+  if (!isTRUE(ready)) {
+    btn <- htmltools::tagAppendAttributes(btn, disabled = "disabled", `aria-disabled` = "true")
+    hint <- shiny::tags$div(class = "text-muted small text-center mt-1", "Complete this step to continue")
+  }
+  return(htmltools::div(class = "nav-proceed", btn, hint))
+}
+
+# Arm-role colour language for tumour-growth curves: vehicle/control reads as a
+# neutral grey; every other arm cycles a curated accent palette led by the app's
+# teal. Heuristic name match mirrors suggest_arm_roles()/set_roles().
+arm_palette <- function(treatments) {
+  trt <- unique(as.character(treatments))
+  low <- tolower(trt)
+  accent <- c("#0F6E5C", "#9A3B3B", "#B8860B", "#3B5BA5", "#6D4C9F", "#1B7F8C", "#C2603B")
+  pal <- character(length(trt))
+  names(pal) <- trt
+  ai <- 1L
+  for (i in seq_along(trt)) {
+    if (grepl("vehicle|control|placebo", low[i])) {
+      pal[i] <- "#9AA0A6"
+    } else {
+      pal[i] <- accent[((ai - 1L) %% length(accent)) + 1L]
+      ai <- ai + 1L
+    }
+  }
+  return(pal)
+}
+
 format_3 <- function(x) {
   ifelse(is.na(x), NA_character_, sprintf("%.3f", round(x, 3)))
 }
@@ -58,6 +135,7 @@ growth_plot <- function(tv, y = "TV") {
   ) +
     ggplot2::geom_line(alpha = 0.65) +
     ggplot2::geom_point() +
+    ggplot2::scale_color_manual(values = arm_palette(tv$Treatment)) +
     ggplot2::theme_minimal() +
     ggplot2::labs(y = y, color = "Treatment"))
 }

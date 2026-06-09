@@ -48,7 +48,7 @@ for (combo_name in names(snapshot$result$details)) {
   cat("\n#### ", detail$metric, " synergy\n\n", sep = "")
   print(knitr::kable(as_display_table(detail$synergy), digits = 3))
   cat("\n#### ", detail$metric, " package figure\n\n", sep = "")
-  print(knitr::include_graphics(detail$figure))
+  cat(sprintf("![%s package figure](%s)\n\n", detail$metric, knitr::image_uri(detail$figure)))
   cat("\n")
 }
 ```

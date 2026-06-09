@@ -60,7 +60,7 @@ TGI_synergy=function(TGI_lst,method='Bliss',ci=0.95,ci_type='perc',display=TRUE,
     theme_Publication()
   figure=ggpubr::ggarrange(p1,p2,labels=c("A","B"),ncol=2)
   if(display) print(figure)
-  if(save) ggsave(paste0(file,'.png'),width=16,height=8,dpi=300)
+  if(save) ggsave(paste0(file,'.png'),figure,width=16,height=8,dpi=300)
 
   bsTGI_r=TGI_lst$bsTGI_r
   bsTGI_r$t=as.matrix(bsTGI_all)

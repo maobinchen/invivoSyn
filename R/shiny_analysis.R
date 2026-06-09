@@ -1,22 +1,3 @@
-capture_package_figure <- function(plot_call, width = 1600, height = 800, res = 150) {
-  file <- tempfile(pattern = "invivoSyn-figure-", fileext = ".png")
-  device_open <- FALSE
-  grDevices::png(filename = file, width = width, height = height, res = res)
-  device_open <- TRUE
-  on.exit({
-    if (device_open) {
-      try(grDevices::dev.off(), silent = TRUE)
-    }
-  }, add = TRUE)
-  value <- plot_call()
-  grDevices::dev.off()
-  device_open <- FALSE
-  return(list(
-    value = value,
-    file = normalizePath(file, winslash = "/", mustWork = TRUE)
-  ))
-}
-
 analysis_snapshot_id <- function(tv, role_map, comparator_map, settings) {
   return(digest::digest(list(tv, role_map, comparator_map, settings), algo = "xxhash64"))
 }
@@ -26,6 +7,9 @@ analyze_combination_with_package <- function(tv, role_map, comparator_map, combo
   combo_treatment <- lookup_treatment(role_map, combo_arm_id)
 
   # Only the selected metric is calculated; switching the metric re-runs analysis.
+  # The synergy functions write their own 300-dpi figure via save=TRUE/file=; use
+  # that file directly rather than re-capturing the printed plot.
+  fig_base <- tempfile(pattern = "invivoSyn-figure-")
   if (identical(settings$metric, "TGI")) {
     tgi_lst <- getTGI(
       combo_tv,
@@ -35,16 +19,15 @@ analyze_combination_with_package <- function(tv, role_map, comparator_map, combo
       ci_type = "bca",
       n_rep = settings$boot_n
     )
-    capture <- capture_package_figure(function() {
-      TGI_synergy(
-        tgi_lst,
-        method = settings$method,
-        ci = settings$conf,
-        ci_type = "bca",
-        display = TRUE,
-        save = FALSE
-      )
-    })
+    value <- TGI_synergy(
+      tgi_lst,
+      method = settings$method,
+      ci = settings$conf,
+      ci_type = "bca",
+      display = FALSE,
+      save = TRUE,
+      file = fig_base
+    )
     efficacy <- tgi_lst$bsTGI_df
   } else {
     auc_lst <- get_mAUCr(
@@ -54,19 +37,18 @@ analyze_combination_with_package <- function(tv, role_map, comparator_map, combo
       ci_type = "bca",
       nrep = settings$boot_n
     )
-    capture <- capture_package_figure(function() {
-      AUC_synergy(
-        auc_lst,
-        t = settings$auc_t,
-        method = settings$method,
-        boot_n = settings$boot_n,
-        ci = settings$conf,
-        ci_type = "bca",
-        display = TRUE,
-        save = FALSE,
-        parallel = "snow"
-      )
-    })
+    value <- AUC_synergy(
+      auc_lst,
+      t = settings$auc_t,
+      method = settings$method,
+      boot_n = settings$boot_n,
+      ci = settings$conf,
+      ci_type = "bca",
+      display = FALSE,
+      save = TRUE,
+      file = fig_base,
+      parallel = "snow"
+    )
     efficacy <- auc_lst$bsAUC_df
   }
 
@@ -75,8 +57,8 @@ analyze_combination_with_package <- function(tv, role_map, comparator_map, combo
     combination_treatment = combo_treatment,
     metric = settings$metric,
     efficacy = efficacy,
-    synergy = capture$value,
-    figure = capture$file
+    synergy = value,
+    figure = normalizePath(paste0(fig_base, ".png"), winslash = "/", mustWork = TRUE)
   ))
 }
 

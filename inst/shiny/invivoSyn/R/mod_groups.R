@@ -1,10 +1,14 @@
 groups_ui <- function(id) {
   ns <- shiny::NS(id)
-  return(bslib::layout_columns(
-    col_widths = c(5, 7),
-    bslib::card(bslib::card_header("Confirm arm roles"), shiny::uiOutput(ns("roles_ui"))),
-    bslib::card(bslib::card_header("Map exact comparators per Combination"), shiny::uiOutput(ns("comparators_ui")))
-  ))
+  roles_card <- bslib::card(
+    full_screen = TRUE, bslib::card_header("Confirm arm roles"),
+    shiny::uiOutput(ns("roles_ui"))
+  )
+  comparators_card <- bslib::card(
+    full_screen = TRUE, bslib::card_header("Map exact comparators per Combination"),
+    shiny::uiOutput(ns("comparators_ui"))
+  )
+  return(split_container(roles_card, comparators_card, sizes = c(5, 7)))
 }
 
 groups_server <- function(id, tv) {

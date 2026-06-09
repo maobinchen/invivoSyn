@@ -3,12 +3,9 @@ test_that("report template renders from an immutable snapshot", {
   app_dir <- system.file("shiny", "invivoSyn", package = "invivoSyn")
   source(file.path(app_dir, "R", "helpers.R"), local = TRUE)
   tgi_png <- tempfile(fileext = ".png")
-  auc_png <- tempfile(fileext = ".png")
-  grDevices::png(tgi_png, width = 100, height = 100)
-  plot.new()
-  grDevices::dev.off()
-  grDevices::png(auc_png, width = 100, height = 100)
-  plot.new()
+  grDevices::png(tgi_png, width = 400, height = 300)
+  graphics::par(mar = c(0, 0, 0, 0))
+  graphics::plot(1, type = "n", axes = FALSE, xlab = "", ylab = "")
   grDevices::dev.off()
   snapshot <- list(
     settings = list(metric = "TGI", method = "Bliss", selected_day = 7, end_day = NA, auc_t = 21),
@@ -48,4 +45,9 @@ test_that("report template renders from an immutable snapshot", {
     envir = environment(), quiet = TRUE
   )
   expect_true(file.exists(rendered))
+  html <- paste(readLines(rendered, warn = FALSE), collapse = "\n")
+  # Package figure must be embedded as a base64 image, not printed as a raw
+  # include_graphics path object.
+  expect_match(html, "data:image/png;base64", fixed = TRUE)
+  expect_false(grepl("knit_image_paths", html, fixed = TRUE))
 })
