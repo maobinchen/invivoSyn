@@ -3,52 +3,435 @@ title: "invivoSyn Combination Synergy Report"
 output:
   html_document:
     self_contained: true
+    theme: null
+    highlight: null
+    mathjax: null
+    toc: false
+    css: null
+    md_extensions: "-markdown_in_html_blocks"
 ---
 
 ```{r setup, include=FALSE}
-knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
-```
+knitr::opts_chunk$set(echo = FALSE, message = FALSE, warning = FALSE)
+suppressPackageStartupMessages({
+  library(dplyr)
+  library(ggplot2)
+  library(htmltools)
+  library(base64enc)
+})
 
-**Source file:** `r source_filename`
-
-**Generated:** `r format(Sys.time(), "%Y-%m-%d %H:%M:%S")`
-
-## Analysis Settings
-
-```{r}
-knitr::kable(as.data.frame(snapshot$settings))
-```
-
-## Arm Roles
-
-```{r}
-knitr::kable(snapshot$role_map)
-```
-
-## Combination Comparator Mapping
-
-```{r}
-knitr::kable(snapshot$comparator_map)
-```
-
-## Tumor Growth
-
-```{r, fig.width=11, fig.height=7}
-print(growth_plot(snapshot$tv, "TV"))
-```
-
-## Package-native Combination Results
-
-```{r results='asis'}
-for (combo_name in names(snapshot$result$details)) {
-  detail <- snapshot$result$details[[combo_name]]
-  cat("### ", combo_name, "\n\n", sep = "")
-  cat("#### ", detail$metric, " efficacy\n\n", sep = "")
-  print(knitr::kable(detail$efficacy, digits = 3))
-  cat("\n#### ", detail$metric, " synergy\n\n", sep = "")
-  print(knitr::kable(as_display_table(detail$synergy), digits = 3))
-  cat("\n#### ", detail$metric, " package figure\n\n", sep = "")
-  cat(sprintf("![%s package figure](%s)\n\n", detail$metric, knitr::image_uri(detail$figure)))
-  cat("\n")
+img_b64 <- function(path) {
+  if (!file.exists(path)) return(NA_character_)
+  sprintf("data:image/png;base64,%s", base64enc::base64encode(path))
 }
+
+make_html_tbl <- function(df) {
+  hdr  <- paste0("<th>", colnames(df), "</th>", collapse = "")
+  rows <- apply(df, 1, function(r) {
+    paste0("<tr>", paste0("<td>", r, "</td>", collapse = ""), "</tr>")
+  })
+  paste0(
+    '<table class="methods-tbl"><thead><tr>', hdr,
+    "</tr></thead><tbody>", paste(rows, collapse = ""),
+    "</tbody></table>"
+  )
+}
+
+n_combos <- length(snapshot$result$details)
+metric   <- snapshot$result$metric
+method   <- snapshot$settings$method
+conf_pct <- paste0(round(snapshot$settings$conf * 100), "%")
+boot_n   <- snapshot$settings$boot_n
+# Locale-independent English date (avoids Chinese/Japanese month names on non-English systems)
+.months_en <- c("January","February","March","April","May","June",
+                "July","August","September","October","November","December")
+gen_date <- paste0(.months_en[as.integer(format(Sys.Date(), "%m"))],
+                   format(Sys.Date(), " %d, %Y"))
+src_file <- if (!is.null(source_filename) && nchar(source_filename) > 0)
+              htmltools::htmlEscape(source_filename) else "uploaded file"
+```
+
+```{=html}
+<style type="text/css">
+@import url('https://fonts.googleapis.com/css2?family=Lora:ital,wght@0,600;0,700;1,400&family=Source+Sans+3:wght@400;500;600&display=swap');
+
+:root {
+--primary: #1b3a6b;
+--primary-light: #2a5298;
+--accent: #e8722a;
+--bg: #f7f8fa;
+--card: #fff;
+--border: #dde3ec;
+--text: #222;
+--text-muted: #666;
+--success: #1a7f4a;
+--warning: #b86800;
+--danger: #b52020;
+--info: #1a5276;
+}
+* { box-sizing: border-box; }
+body { font-family: 'Source Sans 3', "Segoe UI", Arial, sans-serif; background: var(--bg); color: var(--text); font-size: 18px; line-height: 1.6; margin: 0; }
+h1, h2, h3, h4 { font-family: 'Lora', Georgia, serif; }
+.main-container { max-width: none; padding: 0; margin: 0; }
+.container { max-width: none; width: 100%; margin: 0; padding: 0 1.5rem 3rem; }
+h1.title.toc-ignore { display: none; }
+
+#navbar { background: var(--primary); position: sticky; top: 0; z-index: 100; padding: 0 1.5rem; display: flex; align-items: center; flex-wrap: wrap; box-shadow: 0 2px 8px rgba(0,0,0,.18); }
+#navbar a { color: #c8d8f8; text-decoration: none; padding: .75rem 1rem; font-size: 15px; white-space: nowrap; }
+#navbar a:hover { color: #fff; background: var(--primary-light); }
+#navbar .brand { color: #fff; font-weight: 700; font-size: 18px; padding: .75rem 1.2rem .75rem 0; border-right: 1px solid #3a5a9b; margin-right: .6rem; font-family: 'Lora', Georgia, serif; }
+
+.hero { background: linear-gradient(135deg, #0f2044 0%, #1b3a6b 55%, #2a5298 100%); color: #fff; padding: 2.5rem 1.5rem 4.5rem; text-align: center; clip-path: polygon(0 0, 100% 0, 100% 91%, 0 100%); position: relative; overflow: hidden; }
+.hero::before { content: ''; position: absolute; inset: 0; background-image: radial-gradient(circle, rgba(255,255,255,0.07) 1px, transparent 1px); background-size: 22px 22px; pointer-events: none; }
+.hero h1 { font-size: 2.3rem; margin-bottom: .4rem; position: relative; }
+.hero p { opacity: .88; font-size: 1rem; margin: .25rem 0; position: relative; }
+.hero-accent { width: 48px; height: 3px; background: #e8722a; margin: 0.75rem auto 0; position: relative; }
+
+.stats-banner { display: flex; flex-wrap: wrap; gap: 1rem; margin: 1.5rem 0; justify-content: center; }
+.stat-card { border-top: 3px solid #e8722a; background: linear-gradient(160deg, var(--primary) 0%, var(--primary-light) 100%); color: #fff; border-radius: 10px; padding: 1rem 1.5rem; text-align: center; min-width: 135px; flex: 1; }
+.stat-num { font-size: 2.1rem; font-weight: 700; font-family: 'Lora', Georgia, serif; }
+.stat-lbl { font-size: 1rem; opacity: .95; margin-top: .25rem; }
+.stat-sub { font-size: .88rem; opacity: .82; margin-top: .15rem; }
+
+section { margin: 2rem 0; background: var(--card); border-radius: 12px; padding: 1.6rem 2rem; box-shadow: 0 2px 10px rgba(0,0,0,.06); }
+.sec-title { font-size: 1.35rem; color: var(--primary); margin-bottom: 1.2rem; border-bottom: none; border-left: 4px solid #e8722a; padding-left: 0.75rem; font-family: 'Lora', Georgia, serif; }
+.sec-num { display: none; }
+h3 { color: var(--primary-light); margin: 1.4rem 0 .6rem; font-size: 1.08rem; }
+h4 { color: var(--primary); margin: 1.2rem 0 .5rem; font-size: 1.04rem; }
+code { background: #eef2f7; padding: .1em .4em; border-radius: 3px; font-family: Consolas, monospace; font-size: .88em; }
+
+.finding-box { display: flex; gap: .8rem; padding: .9rem 1.1rem; border-radius: 8px; margin: 1rem 0; align-items: flex-start; }
+.finding-box.info    { background: #e8f1fb; border-left: 4px solid var(--info); }
+.finding-box.warning { background: #fff8e1; border-left: 4px solid var(--warning); }
+.finding-box.success { background: #e8f9ee; border-left: 4px solid var(--success); }
+.finding-box.danger  { background: #fdecea; border-left: 4px solid var(--danger); }
+.fb-icon { font-size: 1rem; margin-top: .05rem; flex-shrink: 0; font-weight: 700; display: inline-flex; align-items: center; justify-content: center; width: 1.45rem; height: 1.45rem; background: rgba(0,0,0,.07); border-radius: 50%; }
+.caption { font-size: 12px; color: var(--text-muted); font-style: italic; margin-top: .3rem; }
+
+table.methods-tbl { border-collapse: collapse; width: 100%; font-size: 20px; margin: .8rem 0; }
+table.methods-tbl th { background: var(--primary); color: #fff; padding: .5rem .7rem; text-align: left; }
+table.methods-tbl td { padding: .42rem .7rem; border-bottom: 1px solid var(--border); vertical-align: top; }
+table.methods-tbl tr:nth-child(even) td { background: #f5f8ff; }
+
+.chips { display: flex; flex-wrap: wrap; gap: .35rem; margin: .6rem 0 1rem; }
+.chip { background: #eef2f7; border: 1px solid #cdd6e3; color: var(--primary); padding: .2rem .65rem; border-radius: 14px; font-size: 12.5px; }
+.chip b { color: var(--accent); margin-left: .3rem; }
+
+.nav-pills { display: flex; flex-wrap: wrap; gap: .3rem; list-style: none; padding: 0; margin: .5rem 0 1rem; }
+.nav-pills > li { list-style: none; margin: 0; }
+.nav-pills > li > a { display: inline-block; color: var(--primary); background: #eef2f7; border: 1px solid var(--border); border-radius: 18px !important; padding: .35rem .9rem; font-weight: 600; text-decoration: none; cursor: pointer; }
+.nav-pills > li > a:hover { background: #dde7f5; }
+.nav-pills > li.active > a,
+.nav-pills > li.active > a:hover,
+.nav-pills > li.active > a:focus { background: #e8722a !important; color: #fff !important; border-color: #e8722a !important; }
+.tab-content { padding-top: 1rem; }
+.tab-pane { display: none; }
+.tab-pane.active { display: block; }
+
+.verdict-banner { text-align: center; margin: 1.5rem 0; }
+.verdict-badge { display: inline-block; padding: 0.55rem 2.2rem; border-radius: 4px; font-family: 'Source Sans 3', "Segoe UI", sans-serif; font-size: 1.4rem; font-weight: 700; letter-spacing: 0.18em; text-transform: uppercase; }
+.verdict-badge.synergy    { background: #d4edda; color: #1a7f4a; border: 2px solid #1a7f4a; }
+.verdict-badge.antagonism { background: #fdecea; color: #b52020; border: 2px solid #b52020; }
+.verdict-badge.additive   { background: #e8f1fb; color: #1a5276; border: 2px solid #1a5276; }
+
+.ref-block { border-left: 3px solid #e8722a; padding: 0.8rem 1.2rem; background: #f7f8fa; border-radius: 0 6px 6px 0; font-size: 0.93rem; line-height: 1.8; }
+.ref-num { font-weight: 700; color: var(--primary); margin-right: 0.4rem; }
+
+.report-footer { text-align: center; padding: 1.5rem; font-size: 0.78rem; color: var(--text-muted); border-top: 1px solid var(--border); margin-top: 2rem; }
+
+@media (max-width: 768px) {
+  #navbar { overflow-x: auto; }
+  .container { padding: 0 .8rem 2rem; }
+  section { padding: 1.2rem 1rem; }
+  .stats-banner { flex-direction: column; }
+}
+</style>
+
+<script>
+document.addEventListener("DOMContentLoaded", function() {
+  document.querySelectorAll('.nav-pills a[data-toggle="tab"]').forEach(function(a){
+    a.addEventListener("click", function(e){
+      e.preventDefault();
+      var ul = a.closest("ul.nav-pills");
+      var content = ul.nextElementSibling;
+      ul.querySelectorAll(":scope > li").forEach(function(li){ li.classList.remove("active"); });
+      a.parentElement.classList.add("active");
+      content.querySelectorAll(":scope > .tab-pane").forEach(function(p){ p.classList.remove("active"); });
+      var target = document.querySelector(a.getAttribute("href"));
+      if (target) target.classList.add("active");
+    });
+  });
+});
+</script>
+```
+
+```{r header-block, echo=FALSE}
+htmltools::HTML(paste0(
+  '<div id="navbar">',
+  '<p><span class="brand">invivoSyn</span>',
+  '<a href="#s1">1&nbsp;Settings</a>',
+  '<a href="#s2">2&nbsp;Growth</a>',
+  '<a href="#s3">3&nbsp;Results</a>',
+  '<a href="#s4">4&nbsp;Conclusion</a>',
+  '<a href="#s5">5&nbsp;References</a></p>',
+  '</div>',
+  '<div class="hero">',
+  '<h1>invivoSyn Combination Synergy Report</h1>',
+  '<p>', src_file, ' &mdash; ', metric, ' &middot; ', method, ' model &middot; ', gen_date, '</p>',
+  '<div class="hero-accent"></div>',
+  '</div>',
+  '<div class="container">'
+))
+```
+
+```{r stats-banner, echo=FALSE}
+htmltools::HTML(sprintf(
+  '<div class="stats-banner">
+<div class="stat-card"><div class="stat-num">%d</div><div class="stat-lbl">Combinations</div><div class="stat-sub">analysed</div></div>
+<div class="stat-card"><div class="stat-num">%s</div><div class="stat-lbl">Efficacy Metric</div><div class="stat-sub">primary endpoint</div></div>
+<div class="stat-card"><div class="stat-num">%s</div><div class="stat-lbl">Reference Model</div><div class="stat-sub">synergy framework</div></div>
+<div class="stat-card"><div class="stat-num">%s</div><div class="stat-lbl">Confidence</div><div class="stat-sub">bootstrap CI level</div></div>
+</div>',
+  n_combos, metric, method, conf_pct
+))
+```
+
+```{=html}
+<section id="s1">
+<h2 class="sec-title"><span class="sec-num">1</span>Analysis Settings</h2>
+```
+
+```{r settings-table, echo=FALSE}
+settings_df <- data.frame(
+  Parameter = c(
+    "Efficacy metric", "Reference model", "Confidence level",
+    "Bootstrap replicates", "TGI variable", "TGI analysis day",
+    "AUC end day", "AUC survival day"
+  ),
+  Value = c(
+    metric, method, conf_pct,
+    format(boot_n, big.mark = ","),
+    snapshot$settings$tv_var,
+    as.character(snapshot$settings$selected_day),
+    ifelse(is.na(snapshot$settings$end_day), "All data",
+           as.character(snapshot$settings$end_day)),
+    as.character(snapshot$settings$auc_t)
+  ),
+  stringsAsFactors = FALSE
+)
+htmltools::HTML(paste0('<h3>Parameters</h3>', make_html_tbl(settings_df)))
+```
+
+```{r roles-table, echo=FALSE}
+htmltools::HTML(paste0(
+  '<h3>Arm Roles</h3>',
+  make_html_tbl(as.data.frame(snapshot$role_map))
+))
+```
+
+```{r comparator-table, echo=FALSE}
+htmltools::HTML(paste0(
+  '<h3>Comparator Mapping</h3>',
+  make_html_tbl(as.data.frame(snapshot$comparator_map))
+))
+```
+
+```{=html}
+</section>
+
+<section id="s2">
+<h2 class="sec-title"><span class="sec-num">2</span>Tumor Growth Curves</h2>
+```
+
+```{r growth-plot, echo=FALSE}
+tmp_growth <- tempfile(fileext = ".png")
+ggplot2::ggsave(tmp_growth, growth_plot(snapshot$tv, "TV"),
+                width = 11, height = 6, dpi = 150)
+fig_src <- img_b64(tmp_growth)
+htmltools::HTML(paste0(
+  '<div style="text-align:center;margin:1rem 0;">',
+  '<img src="', fig_src, '" style="max-width:100%;height:auto;">',
+  '</div>',
+  '<div class="caption">Mean tumor volume (&plusmn;&nbsp;SEM) by treatment arm over time.',
+  ' Source: ', src_file, '.</div>'
+))
+```
+
+```{=html}
+</section>
+
+<section id="s3">
+<h2 class="sec-title"><span class="sec-num">3</span>Combination Results</h2>
+<p style="color:var(--text-muted);font-size:0.93rem;margin-bottom:1rem;">Select a combination tab to view its efficacy values, synergy scores with bootstrap confidence intervals, and the bootstrap distribution figure.</p>
+```
+
+```{r combo-tabs, echo=FALSE}
+combo_names <- names(snapshot$result$details)
+safe_ids    <- paste0("tab-combo-", seq_along(combo_names))
+
+nav_items <- paste0(
+  mapply(function(nm, id, i) {
+    paste0(
+      '<li', if (i == 1L) ' class="active"' else '', '>',
+      '<a href="#', id, '" data-toggle="tab">',
+      htmltools::htmlEscape(nm), '</a></li>'
+    )
+  }, combo_names, safe_ids, seq_along(combo_names)),
+  collapse = ""
+)
+
+pane_blocks <- mapply(function(nm, id, i) {
+  detail  <- snapshot$result$details[[nm]]
+  is_act  <- if (i == 1L) " active" else ""
+
+  day_chip <- if (identical(detail$metric, "TGI")) {
+    paste0('<span class="chip">analysis day <b>', snapshot$settings$selected_day,
+           '</b></span>')
+  } else {
+    end <- snapshot$settings$end_day
+    paste0('<span class="chip">AUC end day <b>',
+           if (is.na(end)) "all data" else as.character(end), '</b></span>')
+  }
+
+  chips <- paste0(
+    '<div class="chips">',
+    '<span class="chip">metric <b>', detail$metric, '</b></span>',
+    '<span class="chip">method <b>', method, '</b></span>',
+    '<span class="chip">conf <b>', conf_pct, '</b></span>',
+    day_chip,
+    '</div>'
+  )
+
+  eff_df  <- as.data.frame(detail$efficacy) |>
+    dplyr::mutate(dplyr::across(where(is.numeric), \(x) round(x, 3)))
+  eff_tbl <- as.character(
+    knitr::kable(eff_df, format = "html", table.attr = 'class="methods-tbl"')
+  )
+
+  syn_df  <- as_display_table(detail$synergy) |>
+    dplyr::mutate(dplyr::across(where(is.numeric), \(x) round(x, 4)))
+  syn_tbl <- as.character(
+    knitr::kable(syn_df, format = "html", table.attr = 'class="methods-tbl"')
+  )
+
+  fig_src <- img_b64(detail$figure)
+  fig_html <- if (!is.na(fig_src)) {
+    paste0(
+      '<div style="text-align:center;margin:1rem 0;">',
+      '<img src="', fig_src, '" style="max-width:100%;height:auto;">',
+      '</div>',
+      '<div class="caption">Bootstrap distribution and synergy assessment for ',
+      htmltools::htmlEscape(nm), '.</div>'
+    )
+  } else {
+    '<p style="color:var(--warning);">Figure not available.</p>'
+  }
+
+  paste0(
+    '<div class="tab-pane', is_act, '" id="', id, '">',
+    chips,
+    '<h3>Efficacy (', detail$metric, ')</h3>', eff_tbl,
+    '<h3>Synergy Scores &amp; Bootstrap CI</h3>', syn_tbl,
+    '<h3>Bootstrap Distribution Figure</h3>', fig_html,
+    '</div>'
+  )
+}, combo_names, safe_ids, seq_along(combo_names), SIMPLIFY = TRUE)
+
+htmltools::HTML(paste0(
+  '<ul class="nav nav-pills" role="tablist">', nav_items, '</ul>',
+  '<div class="tab-content">',
+  paste(pane_blocks, collapse = ""),
+  '</div>'
+))
+```
+
+```{=html}
+</section>
+
+<section id="s4">
+<h2 class="sec-title"><span class="sec-num">4</span>Conclusion</h2>
+```
+
+```{r conclusion, echo=FALSE}
+verdict_blocks <- lapply(names(snapshot$result$details), function(nm) {
+  detail <- snapshot$result$details[[nm]]
+
+  p_syn <- tryCatch(
+    min(detail$synergy[["p.val.Synergy"]], na.rm = TRUE),
+    error = function(e) NA_real_
+  )
+  p_ant <- tryCatch(
+    min(detail$synergy[["p.val.Antagonism"]], na.rm = TRUE),
+    error = function(e) NA_real_
+  )
+
+  verdict <- dplyr::case_when(
+    !is.na(p_syn) & p_syn < 0.05 ~ "synergy",
+    !is.na(p_ant) & p_ant < 0.05 ~ "antagonism",
+    TRUE                          ~ "additive"
+  )
+
+  label    <- c(synergy = "SYNERGISTIC", antagonism = "ANTAGONISTIC",
+                additive = "ADDITIVE")[[verdict]]
+  fb_class <- c(synergy = "success", antagonism = "danger", additive = "info")[[verdict]]
+  fb_icon  <- c(synergy = "✓", antagonism = "!", additive = "ⓘ")[[verdict]]
+
+  p_syn_fmt <- if (!is.na(p_syn)) formatC(p_syn, format = "f", digits = 4) else "&mdash;"
+  p_ant_fmt <- if (!is.na(p_ant)) formatC(p_ant, format = "f", digits = 4) else "&mdash;"
+
+  desc <- switch(verdict,
+    synergy = paste0(
+      "The observed combination ", metric, " significantly exceeds the ",
+      method, " expected additivity (p<sub>syn</sub> = ", p_syn_fmt,
+      "). The two agents act synergistically in this model."
+    ),
+    antagonism = paste0(
+      "The observed combination ", metric, " falls significantly below the ",
+      method, " expected additivity (p<sub>ant</sub> = ", p_ant_fmt,
+      "). The two agents act antagonistically in this model."
+    ),
+    additive = paste0(
+      "No significant departure from ", method, " expected additivity was detected ",
+      "(p<sub>syn</sub> = ", p_syn_fmt, ", p<sub>ant</sub> = ", p_ant_fmt,
+      "). The combination effect is consistent with additivity."
+    )
+  )
+
+  paste0(
+    '<h3>', htmltools::htmlEscape(nm), '</h3>',
+    '<div class="verdict-banner">',
+    '<span class="verdict-badge ', verdict, '">', label, '</span>',
+    '</div>',
+    '<div class="finding-box ', fb_class, '">',
+    '<div class="fb-icon">', fb_icon, '</div>',
+    '<div><b>', htmltools::htmlEscape(nm), ':</b> ', desc, '</div>',
+    '</div>'
+  )
+})
+
+htmltools::HTML(paste(verdict_blocks, collapse = "\n"))
+```
+
+```{=html}
+</section>
+
+<section id="s5">
+<h2 class="sec-title"><span class="sec-num">5</span>References</h2>
+<div class="ref-block">
+<span class="ref-num">[1]</span>
+Mao B, Guo S. Statistical assessment of drug synergy from in vivo combination studies
+using mouse tumor models. <em>Cancer Research Communications</em>, 2023, 3(10):
+2146&ndash;2157.
+</div>
+</section>
+```
+
+```{r footer, echo=FALSE}
+htmltools::HTML(paste0(
+  '<div class="report-footer">',
+  'Generated by <strong>invivoSyn</strong> &middot; CrownBio &middot; ',
+  gen_date, ' &middot; Source: ', src_file,
+  '</div>',
+  '</div>'
+))
 ```

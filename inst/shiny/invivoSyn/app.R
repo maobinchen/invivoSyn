@@ -83,8 +83,10 @@ ui <- bslib::page_navbar(
   header = shiny::tags$head(
     shiny::tags$style(shiny::HTML(
       ".app-wordmark { font-family: var(--bs-heading-font-family, 'Fraunces', Georgia, serif); font-weight: 600; letter-spacing: .005em; }
-       .navbar-brand { font-size: 1.15rem; }
-       .bslib-card > .card-header { font-family: var(--bs-heading-font-family, 'Fraunces', Georgia, serif); font-weight: 600; font-size: .95rem; letter-spacing: .01em; padding-top: .55rem; padding-bottom: .55rem; }
+       .navbar { padding-top: 0.75rem; padding-bottom: 0.75rem; }
+       .navbar-brand { font-size: 1.5rem; }
+       .navbar-nav .nav-link { font-size: 1.05rem; padding-top: 0.6rem; padding-bottom: 0.6rem; }
+       .bslib-card > .card-header { font-family: var(--bs-heading-font-family, 'Fraunces', Georgia, serif); font-weight: 600; font-size: 1.1rem; letter-spacing: .01em; padding-top: .55rem; padding-bottom: .55rem; }
        .stat-caption { text-transform: uppercase; letter-spacing: .08em; font-size: .7rem; color: var(--bs-secondary); }
        .stat-value { font-family: var(--bs-code-font-family, 'IBM Plex Mono', monospace); font-size: 1.6rem; line-height: 1; color: var(--bs-primary); }
        .nav-proceed { border-top: 1px solid var(--bs-border-color); margin-top: .75rem; padding-top: .75rem; }
@@ -171,7 +173,16 @@ ui <- bslib::page_navbar(
     analysis_ui("analysis"),
     shiny::uiOutput("nav_to_report")
   ),
-  bslib::nav_panel("Report", icon = shiny::icon("file-arrow-down"), report_ui("report"))
+  bslib::nav_panel("Report", icon = shiny::icon("file-arrow-down"), report_ui("report")),
+  bslib::nav_spacer(),
+  bslib::nav_panel(
+    "Tutorial",
+    icon = shiny::icon("circle-question"),
+    shiny::tags$iframe(
+      src = "tutorial.html",
+      style = "width:100%; height:calc(100vh - 56px); border:none; display:block;"
+    )
+  )
 )
 
 server <- function(input, output, session) {

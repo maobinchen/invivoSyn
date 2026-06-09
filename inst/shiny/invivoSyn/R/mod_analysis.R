@@ -23,14 +23,14 @@ analysis_ui <- function(id) {
   )
   figure_card <- bslib::card(
     full_screen = TRUE,
-    bslib::card_header("Package bootstrap figure"),
+    bslib::card_header("Synergy plot"),
     shiny::imageOutput(ns("bootstrap"), height = "100%")
   )
   return(bslib::layout_sidebar(
     sidebar = sidebar,
     split_container(
       results_card, figure_card,
-      direction = "vertical", sizes = c(3, 2), height = "calc(100vh - 7rem)"
+      direction = "vertical", sizes = c(1, 1), height = "calc(100vh - 7rem)"
     )
   ))
 }
@@ -75,7 +75,7 @@ analysis_server <- function(id, tv, role_map, comparator_map, validation) {
     output$state <- shiny::renderText(if (stale()) "Results are stale. Run analysis again." else "Results match current inputs.")
     output$results_header <- shiny::renderText({
       metric <- if (!is.null(snapshot())) snapshot()$result$metric else input$metric
-      paste0("Package-native Combination results (", metric, ")")
+      paste0("Synergy calculation results (", metric, ")")
     })
     shiny::observe({
       days <- valid_days()

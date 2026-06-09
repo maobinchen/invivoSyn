@@ -5,17 +5,17 @@ upload_ui <- function(id) {
     bslib::card_header("Upload and column mapping"),
     shiny::fileInput(ns("file"), "Tumor-volume data", accept = c(".csv", ".xls", ".xlsx")),
     shiny::uiOutput(ns("sheet_ui")),
+    shiny::radioButtons(ns("format"), "Input format", c("Auto" = "auto", "Wide" = "wide", "Long" = "long")),
+    shiny::uiOutput(ns("mapping_ui")),
+    shiny::actionButton(ns("parse"), "Parse data", class = "btn-primary"),
+    shiny::verbatimTextOutput(ns("status")),
     shiny::selectInput(ns("example"), "Or load an example dataset", c(
       "Choose…" = "",
       "Combination demo (test.csv)" = "test.csv",
       "SW837" = "SW837.csv",
       "LS_1034" = "LS_1034.csv"
     )),
-    shiny::actionButton(ns("load_example"), "Load example", class = "btn-outline-primary mb-2"),
-    shiny::radioButtons(ns("format"), "Input format", c("Auto" = "auto", "Wide" = "wide", "Long" = "long")),
-    shiny::uiOutput(ns("mapping_ui")),
-    shiny::actionButton(ns("parse"), "Parse data", class = "btn-primary"),
-    shiny::verbatimTextOutput(ns("status"))
+    shiny::actionButton(ns("load_example"), "Load example", class = "btn-outline-primary mb-2")
   )
   preview_card <- bslib::card(
     full_screen = TRUE,

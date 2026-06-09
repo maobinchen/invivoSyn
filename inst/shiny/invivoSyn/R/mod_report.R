@@ -4,14 +4,14 @@ report_ui <- function(id) {
     width = 1 / 3,
     bslib::card(bslib::card_header("Complete report"), shiny::downloadButton(ns("html"), "Download HTML report")),
     bslib::card(
-      bslib::card_header("Combination package results"),
+      bslib::card_header("Efficacy and Synergy results"),
       shiny::selectInput(ns("combo"), "Combination", choices = NULL),
       shiny::downloadButton(ns("efficacy_csv"), "Download efficacy CSV"),
       shiny::downloadButton(ns("synergy_csv"), "Download synergy CSV")
     ),
-    bslib::card(bslib::card_header("Growth plot"), shiny::downloadButton(ns("growth_png"), "Download growth PNG")),
+    bslib::card(bslib::card_header("Tumor growth curve"), shiny::downloadButton(ns("growth_png"), "Download growth PNG")),
     bslib::card(
-      bslib::card_header("Combination package figure"),
+      bslib::card_header("Synergy plot"),
       shiny::downloadButton(ns("bootstrap_png"), "Download package figure PNG")
     )
   ))
