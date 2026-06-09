@@ -11,7 +11,9 @@ TGI_synergy(
   ci_type = "perc",
   display = TRUE,
   save = TRUE,
-  file = "TGI_synergy"
+  file = "TGI_synergy",
+  width = 16,
+  height = 8
 )
 }
 \arguments{
@@ -28,9 +30,14 @@ TGI_synergy(
 \item{save}{save image}
 
 \item{file}{if save is TRUE, the name of output file}
+
+\item{width}{width (in inches) of the saved figure}
+
+\item{height}{height (in inches) of the saved figure}
 }
 \value{
-Result of synergy calculation
+a data frame of synergy scores (CI and Synergy Score) and their
+bootstrap confidence intervals, in the same format as \code{\link[=AUC_synergy]{AUC_synergy()}}
 }
 \description{
 Generalized to N-drug combinations: handles any number of single-agent

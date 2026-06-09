@@ -99,8 +99,10 @@ test_that("multiple combinations are analyzed with package-backed TGI orchestrat
   detail <- result$details[[1]]
   expect_equal(detail$metric, "TGI")
   expect_true(is.data.frame(detail$efficacy))
-  expect_true(is.atomic(detail$synergy))
-  expect_true(is.finite(detail$synergy[["Synergy score"]]))
+  expect_true(is.data.frame(detail$synergy))
+  expect_true(all(c("Metric", "Value", "std.err", "lb", "ub", "p.val.Synergy", "p.val.Antagonism") %in% names(detail$synergy)))
+  ss_row <- detail$synergy[grepl("Synergy Score", detail$synergy$Metric), ]
+  expect_true(is.finite(ss_row$Value))
   expect_true(file.exists(detail$figure))
   expect_match(detail$figure, "[.]png$")
   expect_gt(file.size(detail$figure), 0)
