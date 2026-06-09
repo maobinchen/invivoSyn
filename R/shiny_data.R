@@ -100,13 +100,10 @@ suggest_comparator_map <- function(role_map) {
     dplyr::filter(.data$role == "Combination")
   suggested <- purrr::map_dfr(seq_len(nrow(combinations)), function(i) {
     combo <- combinations[i, ]
-    combo_tokens <- extract_arm_tokens(combo$Treatment)
+    combo_parts <- trimws(strsplit(combo$Treatment, "\\+")[[1]])
     matched <- singles$arm_id[vapply(
       singles$Treatment,
-      function(single_name) {
-        single_tokens <- extract_arm_tokens(single_name)
-        any(single_tokens %in% combo_tokens)
-      },
+      function(single_name) single_name %in% combo_parts,
       logical(1)
     )]
     return(tibble::tibble(
