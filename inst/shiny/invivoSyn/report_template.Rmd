@@ -205,14 +205,11 @@ htmltools::HTML(sprintf(
 settings_df <- data.frame(
   Parameter = c(
     "Efficacy metric", "Reference model", "Confidence level",
-    "Bootstrap replicates", "TGI variable", "TGI analysis day",
-    "AUC end day", "AUC survival day"
+    "Bootstrap replicates", "AUC end day", "AUC survival day"
   ),
   Value = c(
     metric, method, conf_pct,
     format(boot_n, big.mark = ","),
-    snapshot$settings$tv_var,
-    as.character(snapshot$settings$selected_day),
     ifelse(is.na(snapshot$settings$end_day), "All data",
            as.character(snapshot$settings$end_day)),
     as.character(snapshot$settings$auc_t)
@@ -284,14 +281,9 @@ pane_blocks <- mapply(function(nm, id, i) {
   detail  <- snapshot$result$details[[nm]]
   is_act  <- if (i == 1L) " active" else ""
 
-  day_chip <- if (identical(detail$metric, "TGI")) {
-    paste0('<span class="chip">analysis day <b>', snapshot$settings$selected_day,
-           '</b></span>')
-  } else {
-    end <- snapshot$settings$end_day
-    paste0('<span class="chip">AUC end day <b>',
-           if (is.na(end)) "all data" else as.character(end), '</b></span>')
-  }
+  end <- snapshot$settings$end_day
+  day_chip <- paste0('<span class="chip">AUC end day <b>',
+                     if (is.na(end)) "all data" else as.character(end), '</b></span>')
 
   chips <- paste0(
     '<div class="chips">',
