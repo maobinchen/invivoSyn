@@ -15,12 +15,11 @@ APP_HELPERS <- c(
   "suggest_arm_roles", "suggest_comparator_map",
   "validate_invivosyn_experiment", "analysis_snapshot_id",
   "analyze_combinations", "build_analysis_tv", "build_combo_role_args",
-  "latest_common_day", "latest_coverage_day", "lookup_treatment", "lookup_arm_id"
+  "latest_common_day", "lookup_treatment", "lookup_arm_id"
 )
 
 PACKAGE_APIS <- c(
-  "set_roles", "get_roles", "getTGI", "get_mAUCr",
-  "TGI_synergy", "AUC_synergy"
+  "set_roles", "get_roles", "get_mAUCr", "AUC_synergy"
 )
 
 app_env <- environment()

@@ -10,47 +10,26 @@ analyze_combination_with_package <- function(tv, role_map, comparator_map, combo
   # The synergy functions write their own 300-dpi figure via save=TRUE/file=; use
   # that file directly rather than re-capturing the printed plot.
   fig_base <- tempfile(pattern = "invivoSyn-figure-")
-  if (identical(settings$metric, "TGI")) {
-    tgi_lst <- getTGI(
-      combo_tv,
-      sel_day = settings$selected_day,
-      tv_var = settings$tv_var,
-      ci = settings$conf,
-      ci_type = "bca",
-      n_rep = settings$boot_n
-    )
-    value <- TGI_synergy(
-      tgi_lst,
-      method = settings$method,
-      ci = settings$conf,
-      ci_type = "bca",
-      display = FALSE,
-      save = TRUE,
-      file = fig_base
-    )
-    efficacy <- tgi_lst$bsTGI_df
-  } else {
-    auc_lst <- get_mAUCr(
-      combo_tv,
-      sel_day = settings$end_day,
-      ci = settings$conf,
-      ci_type = "bca",
-      nrep = settings$boot_n
-    )
-    value <- AUC_synergy(
-      auc_lst,
-      t = settings$auc_t,
-      method = settings$method,
-      boot_n = settings$boot_n,
-      ci = settings$conf,
-      ci_type = "bca",
-      display = FALSE,
-      save = TRUE,
-      file = fig_base,
-      parallel = "snow"
-    )
-    efficacy <- auc_lst$bsAUC_df
-  }
+  auc_lst <- get_mAUCr(
+    combo_tv,
+    sel_day = settings$end_day,
+    ci = settings$conf,
+    ci_type = "bca",
+    nrep = settings$boot_n
+  )
+  value <- AUC_synergy(
+    auc_lst,
+    t = settings$auc_t,
+    method = settings$method,
+    boot_n = settings$boot_n,
+    ci = settings$conf,
+    ci_type = "bca",
+    display = FALSE,
+    save = TRUE,
+    file = fig_base,
+    parallel = "snow"
+  )
+  efficacy <- auc_lst$bsAUC_df
 
   return(list(
     combination_arm_id = combo_arm_id,

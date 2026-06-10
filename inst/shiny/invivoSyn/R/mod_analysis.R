@@ -1,12 +1,9 @@
 analysis_ui <- function(id) {
   ns <- shiny::NS(id)
   sidebar <- bslib::sidebar(
-    shiny::radioButtons(ns("metric"), "Metric", c("TGI", "AUC")),
     shiny::radioButtons(ns("method"), "Reference model", c("Bliss", "HSA"), inline = TRUE),
-    shiny::selectInput(ns("selected_day"), "TGI analysis day", choices = NULL),
     shiny::selectInput(ns("end_day"), "AUC end day", choices = NULL),
     shiny::numericInput(ns("auc_t"), "AUC survival-estimation day", 21, min = 1),
-    shiny::radioButtons(ns("tv_var"), "TGI variable", c("DeltaTV", "RTV"), inline = TRUE),
     shiny::selectInput(ns("conf"), "Confidence level", c("90%" = 0.9, "95%" = 0.95), 0.95),
     shiny::numericInput(ns("boot_n"), "Bootstrap replicates", 1000, min = 100, step = 100),
     shiny::actionButton(ns("run"), "Run Analysis", class = "btn-primary w-100"),
@@ -42,18 +39,16 @@ analysis_server <- function(id, tv, role_map, comparator_map, validation) {
       sort(unique(stats::na.omit(tv()$Day)))
     })
     settings <- shiny::reactive(list(
-      metric = input$metric,
+      metric = "AUC",
       method = input$method,
-      selected_day = as.numeric(input$selected_day),
       end_day = if (identical(input$end_day, "__all__")) NA_real_ else as.numeric(input$end_day),
       auc_t = as.numeric(input$auc_t),
-      tv_var = input$tv_var,
       conf = as.numeric(input$conf),
       boot_n = as.integer(input$boot_n)
     ))
     current_id <- shiny::reactive(analysis_snapshot_id(tv(), role_map(), comparator_map(), settings()))
     analysis_validation <- shiny::reactive({
-      validate_invivosyn_experiment(tv(), role_map(), comparator_map(), input$selected_day)
+      validate_invivosyn_experiment(tv(), role_map(), comparator_map())
     })
     snapshot <- shiny::eventReactive(input$run, {
       shiny::validate(shiny::need(validation()$valid, "Resolve review validation errors before analysis."))
@@ -74,31 +69,17 @@ analysis_server <- function(id, tv, role_map, comparator_map, validation) {
     stale <- shiny::reactive(!is.null(snapshot()) && !identical(snapshot()$id, current_id()))
     output$state <- shiny::renderText(if (stale()) "Results are stale. Run analysis again." else "Results match current inputs.")
     output$results_header <- shiny::renderText({
-      metric <- if (!is.null(snapshot())) snapshot()$result$metric else input$metric
+      metric <- if (!is.null(snapshot())) snapshot()$result$metric else "AUC"
       paste0("Synergy calculation results (", metric, ")")
     })
     shiny::observe({
       days <- valid_days()
       shiny::updateSelectInput(
         session,
-        "selected_day",
-        choices = stats::setNames(as.character(days), as.character(days)),
-        selected = as.character(max(days))
-      )
-      shiny::updateSelectInput(
-        session,
         "end_day",
         choices = c("All data" = "__all__", stats::setNames(as.character(days), as.character(days))),
         selected = "__all__"
       )
-    })
-    shiny::observe({
-      shiny::req(tv(), role_map())
-      # Default the TGI analysis day to the last day on which every arm still has
-      # at least 80% of its baseline animals measured.
-      coverage_day <- latest_coverage_day(tv(), role_map()$arm_id, min_prop = 0.8)
-      selected <- if (is.na(coverage_day)) max(valid_days()) else coverage_day
-      shiny::updateSelectInput(session, "selected_day", selected = as.character(selected))
     })
     shiny::observe({
       shiny::req(snapshot())

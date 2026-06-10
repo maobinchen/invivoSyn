@@ -30,7 +30,7 @@ library(dplyr)
 
 # Introduction
 
-This vignette demonstrates how to use invivoSyn package, which is designed to evaluate synergy for in vivo tumor growth data. Synergy can be calculated based on TGI/AUC based drug effect or linear mixed model. For effect based efficacy, three reference models can be selected, which are HSA (Highest Single Agent), Bliss(Bliss Independence) or RA(Response Addivity).
+This vignette demonstrates how to use the invivoSyn package, which is designed to evaluate synergy for in vivo tumor growth data. Synergy can be calculated based on AUC-based drug effect or linear mixed model. For effect based efficacy, two reference models can be selected: HSA (Highest Single Agent) or Bliss (Bliss Independence).
 
 # User manual
 
@@ -60,7 +60,7 @@ tv <- read_tv("triple_study.csv",
 
 `read_tv()` validates the input, ignores any non-participating treatments,
 and attaches a `roles` attribute that downstream functions
-(`getTGI`, `TGI_synergy`, `AUC_synergy`, `lmm_synergy`, `CombPDX_CI`,
+(`AUC_synergy`, `lmm_synergy`, `CombPDX_CI`,
 `global_CI_synergy`) consume automatically — no need to repeat the role
 mapping at each call.
 
@@ -95,30 +95,18 @@ plot_group_by_day(tv)
 plot_group_by_day(tv, y = "RTV")
 ```
 
-## Calculate TGI and medianAUCRatio
+## Calculate medianAUCRatio (AUC efficacy)
 
-TGI of a treatment group(T) at specific day(t) is defined as 1-Delta(T)/Delta(V), while Delta(T)=TV^T^(t)-TV^T^(0), and Delta(V)=TV^V^(t)-TV^V^(0)^3^. medianAUCRatio is defined as the median ratio of all normalized AUC pairs for mice in the treatment group and vehicle group^1^. The confidence interval of both TGI and medianAUCRatio are calculated using stratified bootstrap method, three options are available: percentile interval, bootstrap t-interval and bias corrected BCa interval.
+medianAUCRatio is defined as the median ratio of all normalized AUC pairs for mice in the treatment group and vehicle group^1^. The confidence interval is calculated using the stratified bootstrap method; three options are available: percentile interval, bootstrap t-interval, and bias-corrected BCa interval.
 ```{r, efficacy}
-sel_day=tv %>% filter(Group=='Group 1') %>% count(Day) %>% mutate(prop=n/max(n)) %>% filter(prop>=0.8) %>% pull(Day) %>% max()
-TGI_lst <- getTGI(tv, sel_day, ci = 0.9, ci_type = "bca")
-TGI_lst$bsTGI_df %>% kable(digits=3)
 AUC_lst <- get_mAUCr(tv, ci = 0.9, ci_type = "bca")
 AUC_lst$bsAUC_df %>% kable(digits=3)
 ```
 
 ## Calculate synergy 
 
-### TGI based synergy
-TGI based synergy is based on TGI from a specific day, normally we will use the last day of the vehicle group. Synergy score is defined as the difference between observed and expected TGI  of the combination group in percentage, using Bliss, HSA or RA as the reference model. P-value and confidence interval are calculated using stratified bootstrap method, three options are available: percentile interval, bootstrap t-interval and bias corrected BCa interval. 
-```{r, fig.width=16}
-bliss_synergy_TGI <- TGI_synergy(TGI_lst)
-bliss_synergy_TGI
-hsa_synergy_TGI <- TGI_synergy(TGI_lst, method = "HSA", ci = 0.9, ci_type = "bca", save = T)
-hsa_synergy_TGI
-```
-
 ### AUC based synergy
-AUC based synergy is based on area under curve(AUC) of each mouse, first we will estimate tumor growth rate(k) of each mouse by its normalized AUC^1^, which can be used to calculate tumor volume at time t using formula TV~t~=TV~0~exp(kt). We will calcuate probability of survival associated with drug effect by conditional probability Pr(T|C)=S~T~/S~C~, with S~T~ defined as survival of treatment group and S~C~ defined as survival of control group, a.k.a. vehicle group^2^. TV~t~ is equalvalent with S~T~ here. We will compare observed survival and expected survival of combination group, using Bliss, HSA or RA as the reference model. For Bliss model, S~AB~=S~A~S~B~; for HSA model, S~AB~=min(S~A~,S~B~); and for RA model,S~AB~=S~A~+S~B~-1. Combination index is defined as the ratio of observed and expected S~AB~, whicle synergy score is defined as the difference between observed and expected S~AB~ in percentage. P-value and confidence interval are calculated using stratified bootstrap method, three options are available: percentile interval, bootstrap t-interval and bias corrected BCa interval. 
+AUC based synergy is based on area under curve(AUC) of each mouse, first we will estimate tumor growth rate(k) of each mouse by its normalized AUC^1^, which can be used to calculate tumor volume at time t using formula TV~t~=TV~0~exp(kt). We will calcuate probability of survival associated with drug effect by conditional probability Pr(T|C)=S~T~/S~C~, with S~T~ defined as survival of treatment group and S~C~ defined as survival of control group, a.k.a. vehicle group^2^. TV~t~ is equalvalent with S~T~ here. We will compare observed survival and expected survival of combination group, using Bliss or HSA as the reference model. For Bliss model, S~AB~=S~A~S~B~; for HSA model, S~AB~=min(S~A~,S~B~). Combination index is defined as the ratio of observed and expected S~AB~, whicle synergy score is defined as the difference between observed and expected S~AB~ in percentage. P-value and confidence interval are calculated using stratified bootstrap method, three options are available: percentile interval, bootstrap t-interval and bias corrected BCa interval. 
 ```{r,fig.width=16}
 bliss_synergy_AUC <- AUC_synergy(AUC_lst,parallel = 'snow')
 bliss_synergy_AUC %>% kable(digits=3)
